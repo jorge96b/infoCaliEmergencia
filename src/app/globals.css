@@ -1,26 +1,195 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Interfaz oscura por decisión, no por estética: buena parte del uso será de
+   noche, con cortes de luz y con la batería justa. */
+html,
+body {
+  overscroll-behavior: none;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer components {
+  /* ------------------------------------------------------------------ */
+  /* Hojas inferiores                                                    */
+  /* Todo lo accionable vive en la mitad inferior de la pantalla, que es  */
+  /* lo que alcanza el pulgar de una mano sosteniendo el teléfono.        */
+  /* ------------------------------------------------------------------ */
+  .hoja {
+    @apply absolute inset-x-0 bottom-0 z-[1000] max-h-[85dvh] overflow-y-auto
+           rounded-t-2xl border-t border-slate-800 bg-slate-900/97 p-4
+           pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  .barra-global {
+    @apply absolute inset-x-0 top-0 z-[1000] border-b border-slate-800
+           bg-slate-900/95 backdrop-blur;
+  }
+
+  .banner {
+    @apply absolute inset-x-3 top-16 z-[1000] rounded-xl border border-slate-700
+           bg-slate-900/95 px-3 py-2.5 text-center text-sm text-slate-200 shadow-lg;
+  }
+
+  .banner-error {
+    @apply border-amber-600/50 bg-amber-950/90 text-amber-200;
+  }
+
+  .controles {
+    @apply absolute inset-x-0 bottom-0 z-[1000] flex items-center justify-center gap-2
+           p-4 pb-[max(1rem,env(safe-area-inset-bottom))];
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Botones                                                             */
+  /* Mínimo 44 px de alto en todo lo táctil: se usa en movimiento.        */
+  /* ------------------------------------------------------------------ */
+  .btn-fab {
+    @apply rounded-full bg-sky-600 px-6 py-4 text-base font-semibold text-white
+           shadow-xl transition active:scale-95 active:bg-sky-700;
+  }
+
+  .btn-flotante {
+    @apply grid h-12 w-12 place-items-center rounded-full border border-slate-700
+           bg-slate-900/90 text-lg text-slate-300 shadow-lg transition active:scale-95;
+  }
+
+  .btn-flotante-activo {
+    @apply border-sky-500 bg-sky-950 text-sky-300;
+  }
+
+  .btn-grande {
+    @apply w-full rounded-xl px-4 py-4 text-base font-semibold transition
+           active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-entrar {
+    @apply bg-sky-600 text-white active:bg-sky-700;
+  }
+
+  .btn-salir {
+    @apply border border-slate-600 bg-slate-800 text-slate-200 active:bg-slate-700;
+  }
+
+  .btn-mini {
+    @apply rounded-lg px-3 py-2 text-xs font-semibold transition
+           active:scale-95 disabled:opacity-50;
+  }
+
+  .btn-falta {
+    @apply bg-red-600/90 text-white active:bg-red-700;
+  }
+
+  .btn-llego {
+    @apply border border-emerald-600/60 bg-emerald-600/15 text-emerald-300
+           active:bg-emerald-600/30;
+  }
+
+  .btn-recurso {
+    @apply flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl
+           border border-slate-700 bg-slate-800/60 p-2 text-center text-slate-200
+           transition active:scale-95 active:bg-slate-700 disabled:opacity-50;
+  }
+
+  .btn-nivel {
+    @apply rounded-lg border border-slate-700 bg-slate-800 px-1 py-2.5 text-xs
+           font-medium text-slate-200 transition active:scale-95 active:bg-slate-700
+           disabled:opacity-50;
+  }
+
+  .btn-icono {
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-full bg-slate-800
+           text-slate-400 transition active:scale-95;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs
+           font-medium;
+  }
+
+  .campo {
+    @apply w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-3
+           text-base text-slate-100 placeholder:text-slate-500
+           focus:border-sky-500 focus:outline-none;
+  }
+
+  .etiqueta {
+    @apply mb-1.5 block text-sm font-medium text-slate-300;
+  }
+
+  .aviso {
+    @apply sticky bottom-0 mt-4 rounded-xl border border-sky-700/50 bg-sky-950/95
+           px-3 py-2.5 text-center text-sm text-sky-200;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ------------------------------------------------------------------ */
+/* Marcadores del mapa                                                 */
+/* ------------------------------------------------------------------ */
+.marcador {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9999px;
+  border-width: 2px;
+  border-color: var(--color);
+  background: rgb(15 23 42 / 0.92);
+  font-size: 18px;
+  position: relative;
+}
+
+/* El anillo pulsante marca los puntos con alguna necesidad crítica: son los que
+   deben saltar a la vista sin tener que abrir nada. */
+.marcador-critico {
+  box-shadow: 0 0 0 0 rgb(220 38 38 / 0.7);
+  animation: pulso 2s infinite;
+}
+
+@keyframes pulso {
+  70% {
+    box-shadow: 0 0 0 12px rgb(220 38 38 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(220 38 38 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marcador-critico {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(220 38 38 / 0.6);
+  }
+}
+
+.marcador-personas {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background: #0ea5e9;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* El CSS de Leaflet se importa desde el componente del mapa, así que se carga
+   después de esta hoja y gana por orden. De ahí la especificidad extra: sin
+   ella el lienzo queda gris claro mientras cargan las teselas, que con pantalla
+   oscura y de noche es un fogonazo en la cara. */
+.leaflet-container.leaflet-container {
+  background: #0f172a;
+  font-family: inherit;
+}
+
+.leaflet-control-attribution {
+  background: rgb(15 23 42 / 0.8) !important;
+  color: #94a3b8 !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: #7dd3fc !important;
 }
