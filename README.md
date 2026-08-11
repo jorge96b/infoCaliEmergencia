@@ -66,13 +66,18 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0003_rls.sql
 0004_rpc.sql
 0005_semilla.sql
+0006_rls_catalogos.sql
 ```
 
-Comprueba que quedó bien:
+Luego **comprueba que quedó bien** — no lo des por hecho. Pega
+`supabase/verificar.sql`: revisa tabla por tabla que todo exista, que RLS esté
+activo en las diez tablas y que `anon` no tenga ningún permiso de más. Devuelve
+una fila por comprobación; cualquier ✗ hay que resolverlo antes de seguir.
 
-```sql
-select * from v_global;
-```
+Y para confirmar que la lógica de consenso se comporta sobre *tu* base, pega
+`supabase/prueba_logica.sql`. Crea datos de mentira, comprueba once cosas
+—umbrales, decaimiento, mediana frente a valores extremos, idempotencia— y borra
+todo lo que creó. Es seguro correrlo en producción.
 
 En **Settings → API** copia la URL del proyecto y la `anon key`.
 
