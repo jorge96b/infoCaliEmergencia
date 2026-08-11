@@ -18,15 +18,21 @@ declare
   d1 uuid := 'ffffffff-0000-0000-0000-000000000001';
   d2 uuid := 'ffffffff-0000-0000-0000-000000000002';
   d3 uuid := 'ffffffff-0000-0000-0000-000000000003';
+  d4 uuid := 'ffffffff-0000-0000-0000-000000000004';
+  v_mod uuid := 'ffffffff-2222-2222-2222-222222222222';
   cid uuid := 'ffffffff-1111-1111-1111-111111111111';
   p uuid;
   p2 uuid;
+  p3 uuid;
+  p4 uuid;
   v_nivel text;
   v_conf int;
   v_n int;
   v_cant int;
+  v_oculto boolean;
+  v_nec bigint;
 begin
-  insert into dispositivos (id) values (d1), (d2), (d3)
+  insert into dispositivos (id) values (d1), (d2), (d3), (d4)
     on conflict (id) do nothing;
 
   -- ---- 1. Crear punto y deduplicación por cercanía ----
@@ -137,14 +143,108 @@ begin
       'rechazado', 'rechazado', '✓');
   end;
 
+  -- ---- 10. Moderación ----
+  --
+  -- Se simula la sesión de un moderador fijando la misma variable que lee
+  -- `auth.uid()`. El tercer argumento de `set_config` es `is_local`: se deshace
+  -- solo al terminar la transacción, así que no puede quedarse pegada.
+  insert into moderadores (id, nombre) values (v_mod, 'PRUEBA moderador')
+    on conflict (id) do nothing;
+  perform set_config('request.jwt.claim.sub', v_mod::text, true);
+
+  p3 := rpc_crear_punto('PRUEBA a moderar', 'albergue',
+                        3.4600, -76.5400, d1, gen_random_uuid());
+
+  perform rpc_denunciar('puntos', p3::text, d1, 'falso', gen_random_uuid());
+  perform rpc_denunciar('puntos', p3::text, d2, 'falso', gen_random_uuid());
+  perform rpc_denunciar('puntos', p3::text, d3, 'falso', gen_random_uuid());
+  select oculto into v_oculto from puntos where id = p3;
+
+  insert into _pruebas values (12, 'Tres dispositivos denuncian un punto',
+    'queda oculto', case when v_oculto then 'oculto' else 'visible' end,
+    case when v_oculto then '✓' else '✗ FALLA: el auto-ocultamiento no actuó' end);
+
+  perform rpc_mod_decidir('puntos', p3::text, 'aprobado', 'PRUEBA');
+  select oculto into v_oculto from puntos where id = p3;
+
+  insert into _pruebas values (13, 'Un moderador lo aprueba',
+    'vuelve a estar visible', case when v_oculto then 'oculto' else 'visible' end,
+    case when not v_oculto then '✓' else '✗ FALLA' end);
+
+  -- La prueba que justifica media migración: sin la guarda de
+  -- `decisiones_moderacion`, esta cuarta denuncia volvía a tumbarlo y el
+  -- moderador quedaba atrapado deshaciendo lo mismo para siempre.
+  perform rpc_denunciar('puntos', p3::text, d4, 'falso', gen_random_uuid());
+  select oculto into v_oculto from puntos where id = p3;
+
+  insert into _pruebas values (14, 'Cuarta denuncia sobre lo ya aprobado',
+    'sigue visible', case when v_oculto then 'oculto otra vez' else 'visible' end,
+    case when not v_oculto then '✓'
+         else '✗ FALLA: las denuncias deshacen las decisiones' end);
+
+  -- Y la otra mitad: rectificar dentro de la misma hora no puede destapar lo
+  -- que un moderador escondió a mano.
+  v_nec := rpc_reportar_necesidad(p3, 'agua', d2, 1::smallint, gen_random_uuid());
+  perform rpc_mod_decidir('necesidad_reportes', v_nec::text, 'oculto', 'PRUEBA');
+  perform rpc_reportar_necesidad(p3, 'agua', d2, 1::smallint, gen_random_uuid());
+  select oculto into v_oculto from necesidad_reportes where id = v_nec;
+
+  insert into _pruebas values (15, 'Reportar de nuevo lo que se ocultó a mano',
+    'sigue oculto', case when v_oculto then 'oculto' else 'destapado' end,
+    case when v_oculto then '✓'
+         else '✗ FALLA: repetir el reporte deshace la decisión' end);
+
+  -- Un albergue oficial no puede desaparecer del mapa por votación.
+  p4 := rpc_crear_punto('PRUEBA oficial', 'albergue',
+                        3.4700, -76.5500, d1, gen_random_uuid());
+  update puntos set origen = 'oficial' where id = p4;
+
+  perform rpc_denunciar('puntos', p4::text, d1, 'falso', gen_random_uuid());
+  perform rpc_denunciar('puntos', p4::text, d2, 'falso', gen_random_uuid());
+  perform rpc_denunciar('puntos', p4::text, d3, 'falso', gen_random_uuid());
+  select oculto into v_oculto from puntos where id = p4;
+
+  insert into _pruebas values (16, 'Tres denuncias sobre un punto oficial',
+    'sigue visible', case when v_oculto then 'oculto' else 'visible' end,
+    case when not v_oculto then '✓'
+         else '✗ FALLA: se puede tumbar un albergue verificado' end);
+
+  -- Sin sesión de moderador, moderar tiene que ser imposible.
+  perform set_config('request.jwt.claim.sub', '', true);
+  begin
+    perform rpc_mod_decidir('puntos', p3::text, 'oculto', 'PRUEBA');
+    insert into _pruebas values (17, 'Moderar sin ser moderador',
+      'rechazado', 'aceptado', '✗ FALLA: cualquiera puede moderar');
+  exception when insufficient_privilege then
+    insert into _pruebas values (17, 'Moderar sin ser moderador',
+      'rechazado', 'rechazado', '✓');
+  end;
+  perform set_config('request.jwt.claim.sub', v_mod::text, true);
+
+  -- Bloquear sin ocultar deja el rastro en el mapa, que es justo lo que no
+  -- sirve. Va al final porque después de esto d3 ya no puede reportar.
+  perform rpc_mod_bloquear(d3, true, 'PRUEBA de bloqueo', true);
+  select count(*) into v_n from persona_reportes
+   where dispositivo_id = d3 and not oculto;
+
+  insert into _pruebas values (18, 'Bloquear ocultando todo lo publicado',
+    'no queda nada visible', v_n || ' filas visibles',
+    case when v_n = 0 then '✓' else '✗ FALLA: lo suyo sigue en el mapa' end);
+
 exception when others then
   insert into _pruebas values (99, 'ERROR INESPERADO', '', sqlerrm, '✗');
 end $$;
 
 -- Limpieza: todo lo que creó la prueba, pase lo que pase. El borrado en cascada
--- se lleva reportes, confirmaciones y presencia asociados.
+-- se lleva reportes, confirmaciones y presencia asociados; las denuncias y las
+-- decisiones NO van en cascada (`reportes_abuso.fila_id` es texto sin clave
+-- foránea), así que se borran a mano y antes que aquello a lo que apuntan.
+delete from reportes_abuso      where dispositivo_id::text like 'ffffffff-%';
+delete from acciones_moderacion where moderador::text like 'ffffffff-%';
+delete from decisiones_moderacion where moderador::text like 'ffffffff-%';
 delete from puntos where nombre like 'PRUEBA %';
-delete from dispositivos where id::text like 'ffffffff-%';
+delete from moderadores   where id::text like 'ffffffff-%';
+delete from dispositivos  where id::text like 'ffffffff-%';
 
 select prueba, esperado, obtenido, estado
 from _pruebas

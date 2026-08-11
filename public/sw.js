@@ -162,9 +162,26 @@ self.addEventListener("fetch", (evento) => {
     return;
   }
 
+  // El panel de moderación no se cachea nunca, ni su HTML ni sus datos. Moderar
+  // sin servidor no significa nada —no se puede aplicar una decisión— y una cola
+  // de denuncias guardada en disco es justo lo que no debe quedar en un teléfono
+  // prestado.
+  if (url.origin === self.location.origin && url.pathname.startsWith("/moderacion")) {
+    return;
+  }
+
   // Datos de Supabase. Se compara también el origen: `/rest/v1/` a secas
   // engancharía cualquier ruta que coincida, incluida una del propio sitio.
-  if (url.origin !== self.location.origin && url.pathname.startsWith("/rest/v1/")) {
+  //
+  // Sólo se cachea lo que lleva `x-device-id`, que es la cabecera que fija el
+  // cliente público (lib/supabase.ts) y que el de moderación deliberadamente no
+  // manda. Es una regla que falla del lado seguro: si mañana aparece otro
+  // cliente con sesión, deja de cachearse en vez de filtrarse.
+  if (
+    url.origin !== self.location.origin &&
+    url.pathname.startsWith("/rest/v1/") &&
+    request.headers.get("x-device-id")
+  ) {
     evento.respondWith(primeroRed(request, DATOS));
     return;
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Denunciar from "@/components/Denunciar";
 import {
   confirmarPunto,
   entrarAPunto,
@@ -338,6 +339,8 @@ export default function HojaPunto({
             </div>
           </div>
         )}
+
+        <Denunciar tabla="puntos" filaId={punto.id} ocupado={ocupado} accion={accion} />
       </div>
 
       {aviso && <p className="aviso">{aviso}</p>}

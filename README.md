@@ -67,6 +67,7 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0004_rpc.sql
 0005_semilla.sql
 0006_rls_catalogos.sql
+0007_moderacion.sql
 ```
 
 Luego **comprueba que quedó bien** — no lo des por hecho. Pega
@@ -112,7 +113,27 @@ values ('Albergue Fulanito', 'albergue', 3.4520, -76.5290, 'San Fernando',
         'oficial', gen_random_uuid(), gen_random_uuid());
 ```
 
-### 5. Desplegar
+### 5. Dar de alta a los moderadores
+
+El panel vive en `/moderacion` y no está enlazado desde ningún sitio. Entra con
+correo y contraseña, y no hay registro: las cuentas se crean a mano.
+
+En **Authentication → Users → Add user** crea una cuenta por persona (marca
+*Auto Confirm User*). Luego, en el SQL Editor, dale permiso a cada una:
+
+```sql
+insert into moderadores (id, nombre)
+select id, 'Nombre de la persona' from auth.users where email = 'correo@ejemplo.com';
+```
+
+Para revocar a alguien, `update moderadores set activo = false where …`. Es
+preferible a borrar la fila: la bitácora sigue pudiendo decir quién hizo qué.
+
+Ten a las tres o cinco personas listas **antes** de difundir el enlace, no
+después. La moderación es un cuello de botella humano y no se improvisa con el
+mapa ya lleno de gente.
+
+### 6. Desplegar
 
 Importa el repositorio en Vercel y define las dos variables de entorno. No hace
 falta nada más.
@@ -129,10 +150,15 @@ src/
     HojaPunto.tsx        detalle del punto: qué falta / qué hay / personas
     CrearPunto.tsx       marcar un lugar nuevo
     BarraGlobal.tsx      cifras de toda la ciudad
+    Denunciar.tsx        avisar de contenido falso u ofensivo
+    mod/                 el panel de moderación
+  app/moderacion/        pantalla del panel (sin enlazar, con noindex)
   lib/
     datos.ts             TODA la lectura
     reportes.ts          TODA la escritura
     supabase.ts          cliente, con el id de dispositivo en la cabecera
+    moderacion.ts        lectura y escritura del panel
+    supabaseModeracion.ts  cliente aparte, con sesión de Supabase Auth
 supabase/migrations/     esquema, vistas, RLS y RPC
 ```
 
@@ -232,6 +258,18 @@ En la interfaz, con dos navegadores (uno normal y uno de incógnito, para tener
 dos identidades de dispositivo): confirmar la misma necesidad en ambos y ver que
 el nivel sube de "poco requerido" a "muy requerido".
 
+La moderación necesita **tres** identidades de dispositivo para llegar al umbral.
+Con un punto de prueba:
+
+1. Denunciarlo desde los tres: al tercero desaparece del mapa.
+2. Entrar a `/moderacion` y aprobarlo: **vuelve** a aparecer.
+3. Denunciarlo desde un cuarto dispositivo: tiene que **seguir** visible. Si
+   desaparece, la migración 0007 no está aplicada y moderar no sirve de nada.
+4. Bloquear el dispositivo marcando "ocultar también todo lo que publicó", y
+   comprobar que sus puntos se van y que reportar desde él ahora responde
+   "Este dispositivo fue bloqueado…".
+5. Mirar la bitácora: deben estar las tres acciones, con nombre y motivo.
+
 El modo sin señal hay que probarlo contra un build de producción (`npm run build
 && npm start`), porque en modo desarrollo el service worker no se comporta igual.
 En DevTools → Network → Offline:
@@ -246,10 +284,39 @@ En DevTools → Network → Offline:
 
 ---
 
+### Moderación
+
+Cualquiera puede denunciar un lugar desde su hoja de detalle, sin registrarse.
+Tres denuncias de dispositivos distintos lo ocultan solas, y a partir de ahí
+decide una persona en `/moderacion`.
+
+Lo importante de ese panel no es la lista, es **quién gana cuando el
+automatismo y una persona no coinciden**. Gana la persona, siempre:
+
+- Lo que un moderador aprueba **no vuelve a caer** por más denuncias que reciba.
+  Sin esa regla, tres cuentas coordinadas deshacen cada decisión indefinidamente
+  y moderar se vuelve achicar agua con un balde agujereado.
+- Lo que un moderador oculta **no se destapa** porque su autor lo vuelva a
+  reportar dentro de la misma hora.
+- Un punto marcado como oficial **no se oculta por votación**, sólo a mano.
+
+Nada se borra nunca: ocultar y bloquear son reversibles, y cada acción queda en
+una bitácora con quién, qué, cuándo y por qué. Antes de bloquear a alguien se
+puede ver todo lo que publicó y también **cuántas denuncias emitió** — quien
+dispara diez en media hora está intentando tumbar información buena, y eso
+también es abuso.
+
+Las denuncias siguen sin poder leerse desde el mapa, a propósito: si alguien
+pudiera contar cuántas lleva una fila, sabría cuántas le faltan para tumbarla.
+
 ## Lo que falta
 
-- **Moderación.** Las tablas y el auto-ocultamiento a las tres denuncias ya
-  funcionan; falta el panel para revisar lo ocultado y bloquear dispositivos.
+- **Gestión de puntos desde el panel.** Cerrar un albergue que ya no opera,
+  marcar duplicados y promover un punto a oficial siguen siendo `UPDATE` a mano
+  en el SQL Editor.
+- **Denunciar reportes sueltos.** El servidor ya acepta denuncias sobre
+  necesidades, disponibilidad y conteos; la interfaz sólo deja denunciar el
+  lugar entero.
 - **Teselas propias.** Hoy usa las de OpenStreetMap, cuya política de uso
   **prohíbe el tráfico masivo**. Si la aplicación se difunde de verdad, hay que
   migrar a un archivo PMTiles de Cali servido desde almacenamiento propio, antes
