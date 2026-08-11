@@ -31,14 +31,7 @@ export default function Pagina() {
   const [datos, setDatos] = useState<Instantanea>({ puntos: [], calor: [], global: null });
   const [tipos, setTipos] = useState<TipoPunto[]>([]);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
-  // El punto abierto se siembra desde `?p=<id>` en el primer render (enlace
-  // profundo), sin un efecto que lo corrija después. La hoja se abrirá sola en
-  // cuanto ese punto llegue en la instantánea.
-  const [seleccionado, setSeleccionado] = useState<string | null>(() =>
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("p"),
-  );
+  const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [colocando, setColocando] = useState(false);
   const [nuevoLugar, setNuevoLugar] = useState<{ lat: number; lng: number } | null>(null);
   const [presenciaEn, setPresenciaEn] = useState<string | null>(null);
@@ -160,9 +153,36 @@ export default function Pagina() {
     return arrancarCola();
   }, []);
 
+  // Enlace profundo: al abrir `?p=<id>` se preselecciona ese punto y la hoja se
+  // abre sola en cuanto llega en la instantánea.
+  //
+  // Va en un efecto y no en el estado inicial a propósito. La página se
+  // prerrenderiza, así que el servidor no puede saber la query: leerla durante
+  // el primer render hacía que cliente y servidor renderizaran cosas distintas
+  // y React avisaba de un fallo de hidratación justo al abrir un enlace
+  // compartido, que es para lo único que sirve esto.
+  //
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("p");
+    // La URL es un sistema externo del que aquí sólo se lee una vez al montar:
+    // no hay cascada que evitar, y leerla durante el render era justo lo que
+    // rompía la hidratación al abrir un enlace compartido.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (id) setSeleccionado(id);
+  }, []);
+
   // Mantener la URL en sincronía con el punto abierto, para que se pueda copiar
   // y compartir el enlace a un punto concreto.
+  // El primer pase se salta: al montar `seleccionado` todavía es null y esto
+  // borraría el `?p=` del enlace que acabamos de recibir, antes de que el efecto
+  // de arriba llegue a aplicarlo.
+  const urlSincronizada = useRef(false);
+
   useEffect(() => {
+    if (!urlSincronizada.current) {
+      urlSincronizada.current = true;
+      return;
+    }
     const url = new URL(window.location.href);
     if (seleccionado) url.searchParams.set("p", seleccionado);
     else url.searchParams.delete("p");
@@ -235,10 +255,12 @@ export default function Pagina() {
           la posición, y volvía a pedir todas las teselas: caro con mala señal y
           justo el tipo de tráfico que la política de uso de OpenStreetMap pide
           evitar. La lista es opaca, así que basta con ponerla encima. */}
+      {/* `|| undefined` en vez de `false`: un `aria-hidden="false"` explícito no
+          aporta nada y era además la causa de un aviso de hidratación. */}
       <div
         className="absolute inset-0"
-        aria-hidden={vista === "lista"}
-        inert={vista === "lista"}
+        aria-hidden={vista === "lista" || undefined}
+        inert={vista === "lista" || undefined}
       >
         <Mapa
           puntos={puntosFiltrados}
