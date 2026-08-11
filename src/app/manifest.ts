@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Mushu — Mapa de emergencia de Cali",
-    short_name: "Mushu",
+    name: "infoCaliEmergencia — Mapa de emergencia de Cali",
+    short_name: "infoCali",
     description:
       "Qué se necesita, qué hay y cuánta gente está en cada punto de Cali. Reportado y verificado por la comunidad.",
     lang: "es",

@@ -1,4 +1,4 @@
--- Mushu — 0002: vistas de agregación.
+-- infoCaliEmergencia — 0002: vistas de agregación.
 --
 -- Aquí vive la defensa contra la desinformación. Dos reglas la resumen:
 --

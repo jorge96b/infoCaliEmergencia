@@ -2,11 +2,11 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mushu — Mapa de emergencia de Cali",
+  title: "infoCaliEmergencia — Mapa de emergencia de Cali",
   description:
     "Mapa colaborativo para saber, punto por punto, qué se necesita, qué hay y cuánta gente está en cada lugar tras el terremoto en Cali.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Mushu", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "infoCali", statusBarStyle: "black-translucent" },
   icons: { icon: "/icono.svg", apple: "/icono.svg" },
 };
 

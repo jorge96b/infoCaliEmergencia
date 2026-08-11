@@ -1,4 +1,4 @@
--- Mushu — 0005: catálogos.
+-- infoCaliEmergencia — 0005: catálogos.
 --
 -- Sólo se siembran catálogos. Deliberadamente NO se incluyen albergues, centros
 -- de acopio ni puntos médicos de ejemplo: enviar gente a una dirección inventada

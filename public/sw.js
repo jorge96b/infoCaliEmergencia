@@ -1,5 +1,5 @@
 /*
- * Service worker de Mushu.
+ * Service worker de infoCaliEmergencia.
  *
  * Escrito a mano en vez de generado por un plugin, y con caché en tiempo de
  * ejecución en vez de precaché. La razón es concreta: precachear obliga a
@@ -13,7 +13,7 @@
  * forma de duplicar reportes.
  */
 
-const VERSION = "mushu-v1";
+const VERSION = "ice-v1";
 const SHELL = `${VERSION}-shell`;
 const TESELAS = `${VERSION}-teselas`;
 const DATOS = `${VERSION}-datos`;

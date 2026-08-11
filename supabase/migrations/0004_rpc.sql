@@ -1,4 +1,4 @@
--- Mushu — 0004: funciones de escritura.
+-- infoCaliEmergencia — 0004: funciones de escritura.
 --
 -- Casi todo lo que escribe la aplicación pasa por aquí en vez de por un INSERT
 -- directo, porque necesita lógica que el cliente no puede garantizar:

@@ -1,4 +1,4 @@
-const CLAVE = "mushu-dispositivo";
+const CLAVE = "ice-dispositivo";
 
 /**
  * Identidad anónima del navegador.

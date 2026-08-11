@@ -16,7 +16,7 @@ import { supabase } from "./supabase";
  * Se puede reenviar la cola cien veces y sigue produciendo una sola fila.
  */
 
-const CLAVE = "mushu-cola-v1";
+const CLAVE = "ice-cola-v1";
 const MAX_INTENTOS = 8;
 
 export type Pendiente = {

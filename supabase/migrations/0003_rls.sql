@@ -1,4 +1,4 @@
--- Mushu — 0003: permisos, RLS y límites de tasa.
+-- infoCaliEmergencia — 0003: permisos, RLS y límites de tasa.
 --
 -- Marco honesto: la `anon key` de Supabase es pública por diseño, así que nada
 -- de lo que hay aquí es autenticación. El trabajo de estas políticas es acotar

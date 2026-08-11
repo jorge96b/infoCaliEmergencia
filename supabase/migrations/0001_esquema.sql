@@ -1,4 +1,4 @@
--- Mushu — mapa colaborativo de emergencia para Cali
+-- infoCaliEmergencia — mapa colaborativo de emergencia para Cali
 -- 0001: enums, catálogos, puntos y tablas de reportes.
 --
 -- Ejecutar en orden: 0001_esquema, 0002_vistas, 0003_rls, 0004_rpc, 0005_semilla.

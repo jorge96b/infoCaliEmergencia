@@ -1,4 +1,4 @@
-# Mushu — Mapa de emergencia de Cali
+# infoCaliEmergencia — Mapa de emergencia de Cali
 
 Mapa colaborativo para centralizar, punto por punto, **qué se necesita, qué hay
 y cuánta gente está en cada lugar** después del terremoto en Cali.
