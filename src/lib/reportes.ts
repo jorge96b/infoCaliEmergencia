@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { idDispositivo, nuevoClientId } from "./dispositivo";
 import { encolar, type Pendiente } from "./cola";
-import type { EstadoPersona, NivelStock } from "./tipos";
+import type { EstadoPersona, MotivoDenuncia, NivelStock, TablaDenunciable } from "./tipos";
 
 /**
  * Toda la escritura de la aplicación pasa por aquí.
@@ -242,6 +242,37 @@ export function salirDePunto(): Promise<Resultado> {
     fn: "rpc_presencia_salir",
     descripcion: "Salida de un punto",
     args: { p_dispositivo: idDispositivo() },
+  });
+}
+
+/**
+ * Denunciar contenido para que lo revise un moderador.
+ *
+ * `rpc_denunciar` devuelve `void` y se traga los conflictos a propósito: nadie
+ * debe poder contar cuántas denuncias lleva una fila, porque sabría exactamente
+ * cuántas le faltan para tumbar información legítima. Por eso quien denuncia no
+ * recibe ninguna señal de qué pasó después, y el mensaje de éxito no puede
+ * insinuar que ya se tomó una decisión.
+ */
+export function denunciar(
+  tabla: TablaDenunciable,
+  filaId: string,
+  motivo: MotivoDenuncia,
+  detalle?: string,
+): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_denunciar",
+    descripcion: "Denuncia de contenido",
+    args: {
+      p_tabla: tabla,
+      p_fila_id: filaId,
+      p_dispositivo: idDispositivo(),
+      p_motivo: motivo,
+      p_client_id: client_id,
+      p_detalle: detalle?.trim() || null,
+    },
   });
 }
 

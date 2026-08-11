@@ -1,4 +1,4 @@
-import type { Demanda, NivelStock } from "./tipos";
+import type { Demanda, MotivoDenuncia, NivelStock, TablaDenunciable } from "./tipos";
 
 /**
  * Antigüedad en palabras. En una emergencia el dato más importante junto al
@@ -61,4 +61,34 @@ export const ESTADO_PERSONA: Record<string, string> = {
   desaparecido: "Desaparecidas",
   herido: "Heridas",
   rescatado: "Rescatadas",
+};
+
+/**
+ * Motivos de denuncia, redactados como los diría quien denuncia.
+ *
+ * `resuelto` no es abuso —significa "esto ya se solucionó"— pero comparte
+ * formulario porque para quien mira el mapa es el mismo gesto: "esto ya no es
+ * cierto". El panel lo separa visualmente de los demás.
+ */
+export const MOTIVO_DENUNCIA: Record<MotivoDenuncia, { texto: string; ayuda: string }> = {
+  falso: { texto: "Es falso", ayuda: "No existe o la información es inventada" },
+  duplicado: { texto: "Está repetido", ayuda: "Ya hay otro igual en el mapa" },
+  ofensivo: { texto: "Es ofensivo", ayuda: "Contenido agresivo o que pone a alguien en riesgo" },
+  resuelto: { texto: "Ya se resolvió", ayuda: "Era cierto, pero ya no" },
+  otro: { texto: "Otra cosa", ayuda: "Cuéntanos qué pasa" },
+};
+
+export const MOTIVOS_DENUNCIA: MotivoDenuncia[] = [
+  "falso",
+  "duplicado",
+  "ofensivo",
+  "resuelto",
+  "otro",
+];
+
+export const TABLA_DENUNCIABLE: Record<TablaDenunciable, string> = {
+  puntos: "Lugar",
+  necesidad_reportes: "Necesidad",
+  insumo_reportes: "Disponibilidad",
+  persona_reportes: "Conteo de personas",
 };
