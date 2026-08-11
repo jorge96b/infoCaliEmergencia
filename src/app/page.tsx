@@ -5,7 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import BarraGlobal from "@/components/BarraGlobal";
 import CrearPunto from "@/components/CrearPunto";
+import EstadoConexion from "@/components/EstadoConexion";
 import HojaPunto from "@/components/HojaPunto";
+import { arrancarCola } from "@/lib/cola";
 import { cargarCatalogos, cargarInstantanea, miPresencia } from "@/lib/datos";
 import { idDispositivo } from "@/lib/dispositivo";
 import { latido } from "@/lib/reportes";
@@ -89,6 +91,34 @@ export default function Pagina() {
     };
   }, [refrescar]);
 
+  // Service worker y bandeja de salida. Van juntos y sin depender de que
+  // Supabase esté configurado: el objetivo es que la app siga sirviendo aunque
+  // la red se caiga a mitad de uso.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then(async () => {
+          const registro = await navigator.serviceWorker.ready;
+          // La página sabe exactamente qué recursos cargó, incluidos los
+          // fragmentos que se piden dinámicamente (el mapa, entre otros) y que
+          // el service worker no llegó a ver porque se activó después. Se los
+          // pasa para que los guarde y la app pueda abrirse sin señal.
+          registro.active?.postMessage({
+            tipo: "precalentar",
+            urls: performance
+              .getEntriesByType("resource")
+              .map((r) => r.name)
+              .filter((u) => u.includes("/_next/static/")),
+          });
+        })
+        .catch(() => {
+          // Sin service worker la app funciona igual, sólo pierde el modo offline.
+        });
+    }
+    return arrancarCola();
+  }, []);
+
   // Mantener viva la sesión de presencia mientras la app esté abierta.
   useEffect(() => {
     if (!presenciaEn) return;
@@ -150,6 +180,8 @@ export default function Pagina() {
           }}
         />
       </div>
+
+      <EstadoConexion />
 
       {colocando && (
         <div className="banner">

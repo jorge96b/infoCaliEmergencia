@@ -115,6 +115,21 @@ body {
     @apply mb-1.5 block text-sm font-medium text-slate-300;
   }
 
+  /* Franja de estado de conexión. Va bajo la barra de cifras y por encima de
+     todo lo demás: si no hay señal, es lo primero que hay que ver. */
+  .estado {
+    @apply absolute inset-x-0 top-[52px] z-[1001] flex flex-wrap items-center
+           justify-center gap-x-2 px-3 py-2 text-center text-sm font-medium;
+  }
+
+  .estado-sin-red {
+    @apply bg-amber-600 text-amber-50;
+  }
+
+  .estado-cola {
+    @apply bg-sky-700 text-sky-50;
+  }
+
   .aviso {
     @apply sticky bottom-0 mt-4 rounded-xl border border-sky-700/50 bg-sky-950/95
            px-3 py-2.5 text-center text-sm text-sky-200;

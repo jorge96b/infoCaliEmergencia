@@ -9,6 +9,7 @@ import {
   reportarPersonas,
   salirDePunto,
   ErrorReporte,
+  type Resultado,
 } from "@/lib/reportes";
 import {
   DEMANDA,
@@ -40,12 +41,18 @@ export default function HojaPunto({
   const [aviso, setAviso] = useState<string | null>(null);
 
   /** Envoltorio común: bloquea, ejecuta, avisa y refresca. */
-  async function accion(fn: () => Promise<void>, exito: string) {
+  async function accion(fn: () => Promise<Resultado>, exito: string) {
     setOcupado(true);
     setAviso(null);
     try {
-      await fn();
-      setAviso(exito);
+      const resultado = await fn();
+      // Sin señal el reporte queda en la bandeja de salida. Decirlo con todas
+      // las letras evita que la persona lo reporte otra vez creyendo que falló.
+      setAviso(
+        resultado === "encolado"
+          ? "Guardado. Se enviará solo cuando vuelva la señal."
+          : exito,
+      );
       onCambio();
     } catch (e) {
       setAviso(e instanceof ErrorReporte ? e.message : "No se pudo enviar. Intenta de nuevo.");
@@ -165,7 +172,7 @@ export default function HojaPunto({
                           disabled={ocupado}
                           onClick={() =>
                             accion(
-                              () => reportarNecesidad(punto.id, n.recurso, true),
+                              () => reportarNecesidad(punto.id, n.recurso, true, n.etiqueta),
                               `Confirmaste que falta ${n.etiqueta.toLowerCase()}.`,
                             )
                           }
@@ -177,7 +184,7 @@ export default function HojaPunto({
                           disabled={ocupado}
                           onClick={() =>
                             accion(
-                              () => reportarNecesidad(punto.id, n.recurso, false),
+                              () => reportarNecesidad(punto.id, n.recurso, false, n.etiqueta),
                               `Reportaste que ya llegó ${n.etiqueta.toLowerCase()}.`,
                             )
                           }
@@ -205,7 +212,7 @@ export default function HojaPunto({
                       disabled={ocupado}
                       onClick={() =>
                         accion(
-                          () => reportarNecesidad(punto.id, r.slug, true),
+                          () => reportarNecesidad(punto.id, r.slug, true, r.etiqueta),
                           `Reportaste que falta ${r.etiqueta.toLowerCase()}.`,
                         )
                       }
@@ -250,7 +257,7 @@ export default function HojaPunto({
                       disabled={ocupado}
                       onClick={() =>
                         accion(
-                          () => reportarInsumo(punto.id, r.slug, nivel as NivelStock),
+                          () => reportarInsumo(punto.id, r.slug, nivel as NivelStock, r.etiqueta),
                           `Reportaste ${STOCK[nivel].texto.toLowerCase()} de ${r.etiqueta.toLowerCase()}.`,
                         )
                       }

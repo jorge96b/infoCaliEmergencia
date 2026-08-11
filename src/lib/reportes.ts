@@ -1,16 +1,25 @@
 import { supabase } from "./supabase";
 import { idDispositivo, nuevoClientId } from "./dispositivo";
+import { encolar, type Pendiente } from "./cola";
 import type { EstadoPersona, NivelStock } from "./tipos";
 
 /**
  * Toda la escritura de la aplicación pasa por aquí.
  *
- * Cada acción genera su `client_id` ANTES del primer intento de red, y todas las
- * funciones del servidor son idempotentes sobre ese identificador. Eso resuelve
- * el caso clásico que rompe las apps con mala señal: la petición llegó, la
- * respuesta se perdió, el cliente reintenta. Con `client_id` el reintento no
- * duplica nada, y es también lo que hará segura la cola offline de la fase 2.
+ * El reparto de responsabilidades es simple y vale la pena tenerlo claro:
+ *
+ *   · Si el servidor RESPONDE con un error, es un error de verdad (límite de
+ *     tasa, dispositivo bloqueado, dato inválido) y se le muestra a la persona.
+ *     Encolarlo sería mentirle diciendo que se guardó.
+ *
+ *   · Si NO hay respuesta, es la señal. El reporte se guarda en la bandeja de
+ *     salida y se envía cuando vuelva la conexión.
+ *
+ * Cada acción genera su `client_id` antes del primer intento de red, así que el
+ * reenvío nunca duplica nada.
  */
+
+export type Resultado = "enviado" | "encolado";
 
 export class ErrorReporte extends Error {
   readonly codigo?: string;
@@ -20,24 +29,57 @@ export class ErrorReporte extends Error {
   }
 }
 
-function traducir(error: { message?: string; code?: string } | null): never {
-  const codigo = error?.code;
-  const bruto = error?.message ?? "Error desconocido";
+function traducir(error: { message?: string; code?: string }): never {
+  const codigo = error.code;
+  const bruto = error.message ?? "Error desconocido";
 
-  // Los mensajes de las excepciones del servidor ya están redactados en español
+  // Los mensajes de las excepciones del servidor ya vienen redactados en español
   // para mostrarse tal cual (límite de tasa, dispositivo bloqueado).
   if (codigo === "P0001" || codigo === "42501") {
     throw new ErrorReporte(bruto.replace(/^.*?:\s*/, ""), codigo);
   }
-  if (codigo === "23505") {
-    throw new ErrorReporte("Ya habías reportado esto. Gracias.", codigo);
-  }
-  if (codigo === "23514") {
+  if (codigo === "23514" || codigo === "22P02") {
     throw new ErrorReporte("Ese dato está fuera de los valores permitidos.", codigo);
   }
   throw new ErrorReporte("No se pudo enviar el reporte. Intenta de nuevo.", codigo);
 }
 
+async function ejecutar(p: Omit<Pendiente, "intentos" | "creado_en">): Promise<Resultado> {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    await encolar(p);
+    return "encolado";
+  }
+
+  let respuesta;
+  try {
+    respuesta = await supabase().rpc(p.fn, p.args);
+  } catch {
+    // Ni siquiera hubo respuesta: sin señal.
+    await encolar(p);
+    return "encolado";
+  }
+
+  const error = respuesta.error;
+  if (!error) return "enviado";
+
+  // Sin código, `supabase-js` está reportando un fallo de red, no del servidor.
+  if (!error.code) {
+    await encolar(p);
+    return "encolado";
+  }
+
+  // El mismo `client_id` ya estaba guardado: el reporte sí se aplicó.
+  if (error.code === "23505") return "enviado";
+
+  traducir(error);
+}
+
+/**
+ * Crear un punto no pasa por la cola: la persona necesita saber ya mismo qué
+ * identificador quedó, porque puede que el servidor haya devuelto un punto que
+ * ya existía a menos de 40 m en vez de crear uno nuevo. Encolarlo dejaría a la
+ * interfaz sin saber a dónde ir.
+ */
 export async function crearPunto(datos: {
   nombre: string;
   tipo: string;
@@ -61,87 +103,131 @@ export async function crearPunto(datos: {
     p_contacto: datos.contacto || null,
   });
 
-  if (error) traducir(error);
+  if (error) {
+    if (!error.code) {
+      throw new ErrorReporte(
+        "Sin señal. Marcar un lugar nuevo necesita conexión; los reportes sobre lugares que ya existen sí funcionan sin ella.",
+      );
+    }
+    traducir(error);
+  }
   return data as string;
 }
 
-export async function confirmarPunto(puntoId: string, existe: boolean): Promise<void> {
-  const { error } = await supabase().rpc("rpc_confirmar_punto", {
-    p_punto: puntoId,
-    p_dispositivo: idDispositivo(),
-    p_voto: existe ? 1 : -1,
-    p_client_id: nuevoClientId(),
+export function confirmarPunto(puntoId: string, existe: boolean): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_confirmar_punto",
+    descripcion: existe ? "Confirmación de un lugar" : "Aviso de lugar inexistente",
+    args: {
+      p_punto: puntoId,
+      p_dispositivo: idDispositivo(),
+      p_voto: existe ? 1 : -1,
+      p_client_id: client_id,
+    },
   });
-  if (error) traducir(error);
 }
 
 /** `falta = true` → "aquí se necesita"; `falta = false` → "ya llegó". */
-export async function reportarNecesidad(
+export function reportarNecesidad(
   puntoId: string,
   recurso: string,
   falta: boolean,
-): Promise<void> {
-  const { error } = await supabase().rpc("rpc_reportar_necesidad", {
-    p_punto: puntoId,
-    p_recurso: recurso,
-    p_dispositivo: idDispositivo(),
-    p_voto: falta ? 1 : -1,
-    p_client_id: nuevoClientId(),
-    p_reportado_en: new Date().toISOString(),
+  etiqueta = recurso,
+): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_reportar_necesidad",
+    descripcion: falta ? `Falta ${etiqueta.toLowerCase()}` : `Ya llegó ${etiqueta.toLowerCase()}`,
+    args: {
+      p_punto: puntoId,
+      p_recurso: recurso,
+      p_dispositivo: idDispositivo(),
+      p_voto: falta ? 1 : -1,
+      p_client_id: client_id,
+      // La hora del momento del toque, no la del envío: un reporte que estuvo
+      // encolado tres horas debe decaer desde que se observó.
+      p_reportado_en: new Date().toISOString(),
+    },
   });
-  if (error) traducir(error);
 }
 
-export async function reportarInsumo(
+export function reportarInsumo(
   puntoId: string,
   recurso: string,
   nivel: NivelStock,
-): Promise<void> {
-  const { error } = await supabase().rpc("rpc_reportar_insumo", {
-    p_punto: puntoId,
-    p_recurso: recurso,
-    p_dispositivo: idDispositivo(),
-    p_nivel: nivel,
-    p_client_id: nuevoClientId(),
-    p_reportado_en: new Date().toISOString(),
+  etiqueta = recurso,
+): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_reportar_insumo",
+    descripcion: `Disponibilidad de ${etiqueta.toLowerCase()}`,
+    args: {
+      p_punto: puntoId,
+      p_recurso: recurso,
+      p_dispositivo: idDispositivo(),
+      p_nivel: nivel,
+      p_client_id: client_id,
+      p_reportado_en: new Date().toISOString(),
+    },
   });
-  if (error) traducir(error);
 }
 
-export async function reportarPersonas(
+export function reportarPersonas(
   puntoId: string,
   estado: EstadoPersona,
   cantidad: number,
-): Promise<void> {
-  const { error } = await supabase().rpc("rpc_reportar_personas", {
-    p_punto: puntoId,
-    p_dispositivo: idDispositivo(),
-    p_estado: estado,
-    p_cantidad: cantidad,
-    p_client_id: nuevoClientId(),
-    p_reportado_en: new Date().toISOString(),
+): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_reportar_personas",
+    descripcion: `Conteo de personas (${estado})`,
+    args: {
+      p_punto: puntoId,
+      p_dispositivo: idDispositivo(),
+      p_estado: estado,
+      p_cantidad: cantidad,
+      p_client_id: client_id,
+      p_reportado_en: new Date().toISOString(),
+    },
   });
-  if (error) traducir(error);
 }
 
-export async function entrarAPunto(puntoId: string, personas = 1): Promise<void> {
-  const { error } = await supabase().rpc("rpc_presencia_entrar", {
-    p_punto: puntoId,
-    p_dispositivo: idDispositivo(),
-    p_client_id: nuevoClientId(),
-    p_personas: personas,
+export function entrarAPunto(puntoId: string, personas = 1): Promise<Resultado> {
+  const client_id = nuevoClientId();
+  return ejecutar({
+    client_id,
+    fn: "rpc_presencia_entrar",
+    descripcion: "Llegada a un punto",
+    args: {
+      p_punto: puntoId,
+      p_dispositivo: idDispositivo(),
+      p_client_id: client_id,
+      p_personas: personas,
+    },
   });
-  if (error) traducir(error);
 }
 
-export async function salirDePunto(): Promise<void> {
-  const { error } = await supabase().rpc("rpc_presencia_salir", {
-    p_dispositivo: idDispositivo(),
+export function salirDePunto(): Promise<Resultado> {
+  return ejecutar({
+    client_id: nuevoClientId(),
+    fn: "rpc_presencia_salir",
+    descripcion: "Salida de un punto",
+    args: { p_dispositivo: idDispositivo() },
   });
-  if (error) traducir(error);
 }
 
 /** Mantiene viva la sesión de presencia; sin latido caduca a los 90 min. */
 export async function latido(): Promise<void> {
-  await supabase().rpc("rpc_presencia_latido", { p_dispositivo: idDispositivo() });
+  // El latido no se encola a propósito: si no hubo señal, lo que corresponde es
+  // que la presencia caduque, no resucitarla media hora después.
+  try {
+    await supabase().rpc("rpc_presencia_latido", { p_dispositivo: idDispositivo() });
+  } catch {
+    /* sin señal: la presencia caducará sola, que es el comportamiento correcto */
+  }
 }

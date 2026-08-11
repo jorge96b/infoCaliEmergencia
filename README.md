@@ -161,6 +161,37 @@ impedirlo:
 La defensa de fondo, sin embargo, es la agregación: medianas, decaimiento y
 umbrales de consenso hacen que un reporte aislado no cambie lo que ve la gente.
 
+### Sin señal
+
+La app es instalable y **funciona sin conexión**. Con la señal caída se puede
+abrir, ver el último estado conocido del mapa y seguir reportando; los reportes
+se guardan en una bandeja de salida en IndexedDB y se envían solos cuando vuelve
+la red. Una franja naranja dice cuántos hay pendientes, para que nadie reporte
+dos veces creyendo que se perdió.
+
+Lo difícil de una cola así no es guardarla, es **no duplicar al reenviarla**. El
+caso que rompe estas apps es que la petición llegue al servidor pero se pierda la
+respuesta, y el cliente reintente creyendo que falló. Aquí está resuelto de raíz:
+cada acción lleva un `client_id` generado *antes* del primer intento de red, y
+todas las funciones del servidor son idempotentes sobre él. Se puede reenviar la
+cola cien veces y sigue produciendo una sola fila.
+
+El reparto de responsabilidades entre error y cola es deliberado: si el servidor
+**responde** con un error (límite de tasa, dato inválido), se le muestra a la
+persona, porque encolarlo sería mentirle diciendo que se guardó. Sólo cuando **no
+hay respuesta** el reporte va a la cola.
+
+Dos cosas que a propósito **no** se encolan: crear un lugar nuevo, porque el
+servidor puede devolver un punto que ya existía a menos de 40 m y la interfaz
+necesita saber a dónde ir; y el latido de presencia, porque si no hubo señal lo
+correcto es que la presencia caduque, no resucitarla media hora después.
+
+El service worker (`public/sw.js`) está escrito a mano y usa caché en tiempo de
+ejecución en vez de precaché, para no acoplarse al build. Guarda las teselas del
+mapa, los fragmentos de Next.js —que llevan hash, así que son inmutables— y la
+última respuesta de datos. Ninguna escritura pasa por él: un service worker
+reintentando POSTs a ciegas sería justo la forma de duplicar reportes.
+
 ### Datos personales
 
 `persona_reportes` guarda **sólo cifras**: ni nombres, ni teléfonos, ni fotos.
@@ -196,15 +227,24 @@ En la interfaz, con dos navegadores (uno normal y uno de incógnito, para tener
 dos identidades de dispositivo): confirmar la misma necesidad en ambos y ver que
 el nivel sube de "poco requerido" a "muy requerido".
 
+El modo sin señal hay que probarlo contra un build de producción (`npm run build
+&& npm start`), porque en modo desarrollo el service worker no se comporta igual.
+En DevTools → Network → Offline:
+
+1. Reportar tres cosas: cada una confirma al instante y la franja dice "Guardados
+   3 reportes".
+2. Recargar la página **sin restablecer la red**: la app debe volver a abrir con
+   el último mapa conocido y la cola intacta.
+3. Volver a poner la red: deben aparecer exactamente tres filas, ni una más.
+4. Con la red ya restablecida, alternar entre pestañas varias veces seguidas para
+   disparar vaciados concurrentes: deben seguir siendo tres filas.
+
 ---
 
 ## Lo que falta
 
-- **Modo offline (PWA).** Los reportes ya generan su `client_id` antes de tocar
-  la red y todas las funciones del servidor son idempotentes sobre él, así que la
-  cola en IndexedDB es lo único que falta: la parte difícil, no duplicar al
-  reenviar, ya está resuelta.
-- **Moderación.** Las tablas y el auto-ocultamiento existen; falta el panel.
+- **Moderación.** Las tablas y el auto-ocultamiento a las tres denuncias ya
+  funcionan; falta el panel para revisar lo ocultado y bloquear dispositivos.
 - **Teselas propias.** Hoy usa las de OpenStreetMap, cuya política de uso
   **prohíbe el tráfico masivo**. Si la aplicación se difunde de verdad, hay que
   migrar a un archivo PMTiles de Cali servido desde almacenamiento propio, antes

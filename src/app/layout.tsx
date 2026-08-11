@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "Mushu — Mapa de emergencia de Cali",
   description:
     "Mapa colaborativo para saber, punto por punto, qué se necesita, qué hay y cuánta gente está en cada lugar tras el terremoto en Cali.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "Mushu", statusBarStyle: "black-translucent" },
+  icons: { icon: "/icono.svg", apple: "/icono.svg" },
 };
 
 export const viewport: Viewport = {
