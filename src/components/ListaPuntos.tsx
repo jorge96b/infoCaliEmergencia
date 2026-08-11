@@ -106,7 +106,11 @@ export default function ListaPuntos({
                   destacada
                     ? `, ${DEMANDA[destacada.nivel].texto.toLowerCase()}: ${destacada.etiqueta}`
                     : ""
-                }${p.personas > 0 ? `, ${p.personas} personas` : ""}${
+                }${
+                  p.personas > 0
+                    ? `, ${p.personas} ${p.personas === 1 ? "persona" : "personas"}`
+                    : ""
+                }${
                   dist ? `, a ${dist}` : ""
                 }, actualizado ${haceCuanto(p.ultimo_movimiento)}`}
                 className={`relative flex w-full items-start gap-3 overflow-hidden rounded-xl border py-3 pl-4 pr-3 text-left transition active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 ${
