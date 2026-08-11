@@ -38,7 +38,11 @@ export default function EstadoConexion() {
   if (enLinea && cola === 0) return null;
 
   return (
-    <div className={`estado ${enLinea ? "estado-cola" : "estado-sin-red"}`}>
+    <div
+      className={`estado ${enLinea ? "estado-cola" : "estado-sin-red"}`}
+      role="status"
+      aria-live="polite"
+    >
       {!enLinea && <span>Sin señal. Puedes seguir reportando.</span>}
       {cola > 0 && (
         <span>

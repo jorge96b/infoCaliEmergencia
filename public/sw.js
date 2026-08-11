@@ -24,6 +24,13 @@ const VIGENTES = [SHELL, TESELAS, DATOS];
 
 const MAX_TESELAS = 1200;
 
+// En `next dev` los fragmentos se sirven en rutas que se reutilizan mientras su
+// contenido cambia, así que la premisa del hash inmutable —de la que depende
+// "caché primero"— no se cumple y el navegador acaba sirviendo código viejo para
+// siempre: se edita un componente, se recarga y no pasa nada. Sólo en local se
+// deja pasar a la red. En producción no cambia nada.
+const DESARROLLO = ["localhost", "127.0.0.1"].includes(self.location.hostname);
+
 /*
  * Un service worker no intercepta las peticiones de la visita en la que se
  * instala: para cuando se activa, el HTML y los fragmentos de esa carga ya
@@ -40,13 +47,19 @@ self.addEventListener("install", (evento) => {
   evento.waitUntil(
     (async () => {
       try {
-        const cache = await caches.open(SHELL);
-        const respuesta = await fetch("/", { cache: "reload" });
-        if (respuesta.ok) {
-          const html = await respuesta.clone().text();
-          await cache.put("/", respuesta);
-          const estaticos = [...new Set(html.match(/\/_next\/static\/[^"')\s]+/g) ?? [])];
-          await Promise.all(estaticos.map((u) => cache.add(u).catch(() => {})));
+        // En desarrollo no se guarda nada de la app: esos fragmentos no se
+        // sirven desde la caché (ver `DESARROLLO`), así que sólo serían basura.
+        // La guarda es un `if` y no un `return` porque abajo queda pendiente
+        // `skipWaiting`, sin el cual el service worker no llegaría a activarse.
+        if (!DESARROLLO) {
+          const cache = await caches.open(SHELL);
+          const respuesta = await fetch("/", { cache: "reload" });
+          if (respuesta.ok) {
+            const html = await respuesta.clone().text();
+            await cache.put("/", respuesta);
+            const estaticos = [...new Set(html.match(/\/_next\/static\/[^"')\s]+/g) ?? [])];
+            await Promise.all(estaticos.map((u) => cache.add(u).catch(() => {})));
+          }
         }
       } catch {
         // Sin red durante la instalación no hay nada que guardar; se reintentará
@@ -59,6 +72,7 @@ self.addEventListener("install", (evento) => {
 
 self.addEventListener("message", (evento) => {
   if (evento.data?.tipo !== "precalentar") return;
+  if (DESARROLLO) return;
 
   evento.waitUntil(
     (async () => {
@@ -157,7 +171,12 @@ self.addEventListener("fetch", (evento) => {
   }
 
   // Fragmentos de Next.js: llevan hash, así que nunca cambian de contenido.
-  if (url.origin === self.location.origin && url.pathname.startsWith("/_next/static/")) {
+  // Salvo en desarrollo, donde esa premisa no se cumple (ver `DESARROLLO`).
+  if (
+    !DESARROLLO &&
+    url.origin === self.location.origin &&
+    url.pathname.startsWith("/_next/static/")
+  ) {
     evento.respondWith(primeroCache(request, SHELL));
     return;
   }
