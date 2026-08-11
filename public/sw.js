@@ -47,13 +47,19 @@ self.addEventListener("install", (evento) => {
   evento.waitUntil(
     (async () => {
       try {
-        const cache = await caches.open(SHELL);
-        const respuesta = await fetch("/", { cache: "reload" });
-        if (respuesta.ok) {
-          const html = await respuesta.clone().text();
-          await cache.put("/", respuesta);
-          const estaticos = [...new Set(html.match(/\/_next\/static\/[^"')\s]+/g) ?? [])];
-          await Promise.all(estaticos.map((u) => cache.add(u).catch(() => {})));
+        // En desarrollo no se guarda nada de la app: esos fragmentos no se
+        // sirven desde la caché (ver `DESARROLLO`), así que sólo serían basura.
+        // La guarda es un `if` y no un `return` porque abajo queda pendiente
+        // `skipWaiting`, sin el cual el service worker no llegaría a activarse.
+        if (!DESARROLLO) {
+          const cache = await caches.open(SHELL);
+          const respuesta = await fetch("/", { cache: "reload" });
+          if (respuesta.ok) {
+            const html = await respuesta.clone().text();
+            await cache.put("/", respuesta);
+            const estaticos = [...new Set(html.match(/\/_next\/static\/[^"')\s]+/g) ?? [])];
+            await Promise.all(estaticos.map((u) => cache.add(u).catch(() => {})));
+          }
         }
       } catch {
         // Sin red durante la instalación no hay nada que guardar; se reintentará
@@ -66,6 +72,7 @@ self.addEventListener("install", (evento) => {
 
 self.addEventListener("message", (evento) => {
   if (evento.data?.tipo !== "precalentar") return;
+  if (DESARROLLO) return;
 
   evento.waitUntil(
     (async () => {
