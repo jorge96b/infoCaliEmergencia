@@ -35,7 +35,9 @@ export default function Pagina() {
   const [mostrarCalor, setMostrarCalor] = useState(true);
   const [destino, setDestino] = useState<[number, number] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(true);
+  // Sin Supabase configurado no hay nada que cargar, así que el estado inicial
+  // se deriva en vez de corregirse dentro de un efecto.
+  const [cargando, setCargando] = useState(configurado);
 
   const refrescando = useRef(false);
 
@@ -57,10 +59,7 @@ export default function Pagina() {
   }, []);
 
   useEffect(() => {
-    if (!configurado) {
-      setCargando(false);
-      return;
-    }
+    if (!configurado) return;
 
     let vivo = true;
     (async () => {

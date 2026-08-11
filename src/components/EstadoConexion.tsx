@@ -1,36 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { suscribir, vaciar } from "@/lib/cola";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { suscribir } from "@/lib/cola";
 
 /**
  * Sin señal, la persona tiene que saber dos cosas de inmediato: que la app se
  * dio cuenta, y que lo que reportó no se perdió. Callarse cualquiera de las dos
  * hace que la gente reporte otra vez, o que deje de reportar.
  */
+
+function suscribirRed(alCambiar: () => void) {
+  window.addEventListener("online", alCambiar);
+  window.addEventListener("offline", alCambiar);
+  return () => {
+    window.removeEventListener("online", alCambiar);
+    window.removeEventListener("offline", alCambiar);
+  };
+}
+
 export default function EstadoConexion() {
-  const [enLinea, setEnLinea] = useState(true);
+  // `useSyncExternalStore` es la forma correcta de leer un estado que vive fuera
+  // de React, como el del navegador: se suscribe y lee sin provocar un render en
+  // cascada. El tercer argumento es lo que se asume al renderizar en el
+  // servidor, donde `navigator` no existe.
+  const enLinea = useSyncExternalStore(
+    suscribirRed,
+    () => navigator.onLine,
+    () => true,
+  );
+
+  // La cola vive en IndexedDB, así que se lee de forma asíncrona y llega por
+  // suscripción. El vaciado no se dispara aquí: de eso ya se encarga
+  // `arrancarCola`, que escucha las mismas señales.
   const [cola, setCola] = useState(0);
-
-  useEffect(() => {
-    setEnLinea(navigator.onLine);
-
-    const conectado = () => {
-      setEnLinea(true);
-      void vaciar();
-    };
-    const desconectado = () => setEnLinea(false);
-
-    window.addEventListener("online", conectado);
-    window.addEventListener("offline", desconectado);
-    const desuscribir = suscribir(setCola);
-
-    return () => {
-      window.removeEventListener("online", conectado);
-      window.removeEventListener("offline", desconectado);
-      desuscribir();
-    };
-  }, []);
+  useEffect(() => suscribir(setCola), []);
 
   if (enLinea && cola === 0) return null;
 
