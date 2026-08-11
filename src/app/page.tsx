@@ -35,26 +35,54 @@ export default function Pagina() {
   const [mostrarCalor, setMostrarCalor] = useState(true);
   const [destino, setDestino] = useState<[number, number] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mensaje, setMensaje] = useState<string | null>(null);
   // Sin Supabase configurado no hay nada que cargar, así que el estado inicial
   // se deriva en vez de corregirse dentro de un efecto.
   const [cargando, setCargando] = useState(configurado);
 
   const refrescando = useRef(false);
 
-  const refrescar = useCallback(async () => {
-    if (refrescando.current) return;
+  /** Devuelve la instantánea recién leída, o null si no se pudo. */
+  const refrescar = useCallback(async (): Promise<Instantanea | null> => {
+    if (refrescando.current) return null;
     refrescando.current = true;
     try {
       const nuevo = await cargarInstantanea();
       setDatos(nuevo);
       setError(null);
-    } catch {
-      // Fallar en silencio y reintentar: con mala señal, un error transitorio no
-      // debe borrar de la pantalla los datos que ya se estaban viendo.
-      setError("Sin conexión con el servidor. Reintentando…");
+      return nuevo;
+    } catch (e) {
+      // Con mala señal, un error transitorio no debe borrar de la pantalla los
+      // datos que ya se estaban viendo, así que sólo se avisa y se reintenta.
+      //
+      // El detalle va incluido a propósito: decir sólo "sin conexión" hizo que un
+      // fallo del service worker se confundiera durante un buen rato con un
+      // problema de señal que no existía.
+      const detalle = e instanceof Error ? e.message : String(e);
+      setError(`No se pudo leer del servidor. Reintentando… (${detalle})`);
+      return null;
     } finally {
       refrescando.current = false;
       setCargando(false);
+    }
+  }, []);
+
+  // Los catálogos son lo único sin lo que la app queda inservible: sin ellos no
+  // hay tipos de lugar que elegir ni recursos que reportar. Por eso se
+  // reintentan en cada ciclo mientras falten, en vez de rendirse tras el primer
+  // intento y dejar la app a medias hasta que alguien la recargue.
+  const catalogosListos = useRef(false);
+
+  const asegurarCatalogos = useCallback(async () => {
+    if (catalogosListos.current) return;
+    try {
+      const cat = await cargarCatalogos();
+      if (cat.tipos.length === 0 || cat.recursos.length === 0) return;
+      setTipos(cat.tipos);
+      setRecursos(cat.recursos);
+      catalogosListos.current = true;
+    } catch {
+      // Se reintenta en el siguiente ciclo; el detalle del fallo lo da `refrescar`.
     }
   }, []);
 
@@ -63,23 +91,20 @@ export default function Pagina() {
 
     let vivo = true;
     (async () => {
-      try {
-        const cat = await cargarCatalogos();
-        if (!vivo) return;
-        setTipos(cat.tipos);
-        setRecursos(cat.recursos);
-      } catch {
-        if (vivo) setError("No se pudieron cargar los catálogos.");
-      }
+      await asegurarCatalogos();
       await refrescar();
       if (vivo) setPresenciaEn(await miPresencia(idDispositivo()));
     })();
 
-    const reloj = setInterval(refrescar, REFRESCO_MS);
+    const ciclo = () => {
+      void asegurarCatalogos();
+      void refrescar();
+    };
+    const reloj = setInterval(ciclo, REFRESCO_MS);
     // El puntaje de cada necesidad cambia con el paso del tiempo aunque no
     // entren datos nuevos, así que refrescar por reloj no es opcional.
     const alVolver = () => {
-      if (document.visibilityState === "visible") refrescar();
+      if (document.visibilityState === "visible") ciclo();
     };
     document.addEventListener("visibilitychange", alVolver);
 
@@ -88,7 +113,7 @@ export default function Pagina() {
       clearInterval(reloj);
       document.removeEventListener("visibilitychange", alVolver);
     };
-  }, [refrescar]);
+  }, [refrescar, asegurarCatalogos]);
 
   // Service worker y bandeja de salida. Van juntos y sin depender de que
   // Supabase esté configurado: el objetivo es que la app siga sirviendo aunque
@@ -191,7 +216,11 @@ export default function Pagina() {
         </div>
       )}
 
-      {error && !colocando && <div className="banner banner-error">{error}</div>}
+      {mensaje && <div className="banner">{mensaje}</div>}
+
+      {error && !colocando && !mensaje && (
+        <div className="banner banner-error">{error}</div>
+      )}
 
       {cargando && (
         <div className="banner">Cargando información…</div>
@@ -234,8 +263,16 @@ export default function Pagina() {
           onCerrar={() => setNuevoLugar(null)}
           onCreado={async (id) => {
             setNuevoLugar(null);
-            await refrescar();
+            const nuevo = await refrescar();
             setSeleccionado(id);
+            // El lugar ya quedó guardado en el servidor. Si el refresco falló, no
+            // estará en el mapa todavía y la hoja no se abrirá: hay que decirlo,
+            // porque si no parece que la creación no funcionó y la persona la
+            // repite hasta chocar contra el límite de cinco por hora.
+            if (!nuevo?.puntos.some((p) => p.id === id)) {
+              setMensaje("Lugar marcado. Aparecerá en el mapa en cuanto responda el servidor.");
+              setTimeout(() => setMensaje(null), 6000);
+            }
           }}
         />
       )}

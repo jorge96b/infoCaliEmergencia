@@ -13,7 +13,10 @@
  * forma de duplicar reportes.
  */
 
-const VERSION = "ice-v1";
+// Al subir la versión se descartan las cachés anteriores. Aquí es obligatorio:
+// la v1 llevaba un service worker que fabricaba respuestas 503 y dejaba la app
+// inservible, y los celulares que ya lo tengan instalado necesitan reemplazarlo.
+const VERSION = "ice-v2";
 const SHELL = `${VERSION}-shell`;
 const TESELAS = `${VERSION}-teselas`;
 const DATOS = `${VERSION}-datos`;
@@ -104,26 +107,38 @@ async function primeroCache(peticion, nombre, maximo) {
   return respuesta;
 }
 
-/** Intenta la red con límite de tiempo; si no llega, sirve lo último que se vio. */
-async function primeroRed(peticion, nombre, msLimite) {
+/**
+ * Red primero, con la última copia como respaldo.
+ *
+ * Tres reglas que este service worker aprendió rompiendo la app en producción:
+ *
+ *   1. NO se le pone un límite de tiempo artificial a la red. La versión
+ *      anterior abandonaba a los 3 s toda petición a Supabase; desde un celular
+ *      contra un servidor remoto eso se cumple constantemente, así que descartaba
+ *      respuestas que iban a llegar perfectamente.
+ *
+ *   2. NO se fabrica una respuesta de error. Antes, al no haber copia en caché,
+ *      esto devolvía un 503 inventado; el cliente lo tomaba como un fallo real
+ *      del servidor y la app se quedaba en "Sin conexión" con la señal intacta.
+ *      Si la red falla de verdad, el error se propaga tal cual y la app ya sabe
+ *      interpretarlo.
+ *
+ *   3. Guardar en caché NUNCA puede tumbar una respuesta buena: `cache.put` va
+ *      con su propio catch y sin await.
+ */
+async function primeroRed(peticion, nombre) {
   const cache = await caches.open(nombre);
 
   try {
-    const respuesta = await (msLimite
-      ? Promise.race([
-          fetch(peticion),
-          new Promise((_, rechazar) => setTimeout(() => rechazar(new Error("lento")), msLimite)),
-        ])
-      : fetch(peticion));
-
-    if (respuesta && respuesta.ok) {
-      await cache.put(peticion, respuesta.clone());
+    const respuesta = await fetch(peticion);
+    if (respuesta.ok) {
+      cache.put(peticion, respuesta.clone()).catch(() => {});
     }
     return respuesta;
-  } catch {
+  } catch (error) {
     const guardada = await cache.match(peticion);
     if (guardada) return guardada;
-    throw new Error("sin red y sin copia");
+    throw error;
   }
 }
 
@@ -147,22 +162,17 @@ self.addEventListener("fetch", (evento) => {
     return;
   }
 
-  // Datos de Supabase: se prefiere lo fresco, pero con 3 s de paciencia como
-  // máximo. Pasado eso vale más un mapa de hace un rato que una pantalla vacía.
-  if (url.pathname.startsWith("/rest/v1/")) {
-    evento.respondWith(
-      primeroRed(request, DATOS, 3000).catch(
-        () =>
-          new Response(JSON.stringify({ message: "sin conexión" }), {
-            status: 503,
-            headers: { "content-type": "application/json" },
-          }),
-      ),
-    );
+  // Datos de Supabase. Se compara también el origen: `/rest/v1/` a secas
+  // engancharía cualquier ruta que coincida, incluida una del propio sitio.
+  if (url.origin !== self.location.origin && url.pathname.startsWith("/rest/v1/")) {
+    evento.respondWith(primeroRed(request, DATOS));
     return;
   }
 
   // Navegación: red primero, y si no hay, el último HTML que se pudo guardar.
+  // Aquí sí tiene sentido sustituir el error por algo mostrable: sin HTML no hay
+  // nada que enseñar, mientras que con los datos la app prefiere enterarse del
+  // fallo para poder encolar lo que la persona reporte.
   if (request.mode === "navigate") {
     evento.respondWith(
       primeroRed(request, SHELL).catch(async () => {

@@ -18,13 +18,29 @@ export default function CrearPunto({
   onCreado: (id: string) => void;
 }) {
   const [nombre, setNombre] = useState("");
-  const [tipo, setTipo] = useState(tipos[0]?.slug ?? "otro");
+  // Sin catálogo no hay tipo válido que elegir. La versión anterior caía a
+  // "otro", que no existe en `tipos_punto`, así que el servidor rechazaba la
+  // creación por clave foránea con un mensaje que no ayudaba a nadie. Ahora se
+  // deja vacío y el formulario no deja enviar hasta que el catálogo llegue.
+  const [tipo, setTipo] = useState(tipos[0]?.slug ?? "");
   const [barrio, setBarrio] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const sinCatalogo = tipos.length === 0;
+
   async function enviar() {
+    if (sinCatalogo) {
+      setError(
+        "No se pudo cargar la lista de tipos de lugar. Revisa la conexión y vuelve a abrir la app.",
+      );
+      return;
+    }
+    if (!tipo) {
+      setError("Elige qué es este lugar.");
+      return;
+    }
     if (nombre.trim().length < 3) {
       setError("Ponle un nombre de al menos 3 letras.");
       return;
@@ -67,6 +83,12 @@ export default function CrearPunto({
       </header>
 
       <label className="etiqueta">¿Qué es este lugar?</label>
+      {sinCatalogo && (
+        <p className="mb-4 rounded-lg border border-amber-600/40 bg-amber-500/10 p-2.5 text-sm text-amber-200">
+          No se pudo cargar la lista de tipos de lugar. Revisa la conexión y
+          vuelve a abrir la app.
+        </p>
+      )}
       <div className="mb-4 grid grid-cols-2 gap-2">
         {tipos.map((t) => (
           <button
@@ -128,7 +150,11 @@ export default function CrearPunto({
 
       {error && <p className="mb-3 text-sm text-red-300">{error}</p>}
 
-      <button onClick={enviar} disabled={ocupado} className="btn-grande btn-entrar">
+      <button
+        onClick={enviar}
+        disabled={ocupado || sinCatalogo}
+        className="btn-grande btn-entrar"
+      >
         {ocupado ? "Guardando…" : "Marcar este lugar"}
       </button>
     </div>

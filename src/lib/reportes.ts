@@ -29,6 +29,16 @@ export class ErrorReporte extends Error {
   }
 }
 
+/**
+ * Traduce un error del servidor a algo que la persona pueda leer.
+ *
+ * Regla aprendida rompiendo esto en producción: **nunca afirmar una causa que no
+ * se conoce**. La versión anterior decía "sin señal" ante cualquier error raro, y
+ * con la señal intacta eso mandó la depuración en la dirección contraria durante
+ * un buen rato. Cuando no se sabe qué pasó, se dice que no se sabe y se muestra
+ * el detalle técnico: es feo, pero es la única pista que va a tener quien reporte
+ * el problema.
+ */
 function traducir(error: { message?: string; code?: string }): never {
   const codigo = error.code;
   const bruto = error.message ?? "Error desconocido";
@@ -41,7 +51,16 @@ function traducir(error: { message?: string; code?: string }): never {
   if (codigo === "23514" || codigo === "22P02") {
     throw new ErrorReporte("Ese dato está fuera de los valores permitidos.", codigo);
   }
-  throw new ErrorReporte("No se pudo enviar el reporte. Intenta de nuevo.", codigo);
+  if (codigo === "23503") {
+    throw new ErrorReporte(
+      "Ese tipo de lugar o recurso no existe en el catálogo. Vuelve a abrir la app para recargarlo.",
+      codigo,
+    );
+  }
+  throw new ErrorReporte(
+    `No se pudo guardar. El servidor respondió: ${bruto}${codigo ? ` (${codigo})` : ""}`,
+    codigo,
+  );
 }
 
 async function ejecutar(p: Omit<Pendiente, "intentos" | "creado_en">): Promise<Resultado> {
@@ -104,9 +123,14 @@ export async function crearPunto(datos: {
   });
 
   if (error) {
+    // Sin código de Postgres no hubo respuesta del servidor. Puede ser falta de
+    // señal, pero también un servidor caído o mal configurado: se dice lo que se
+    // sabe y se adjunta el detalle, en vez de dar por hecho que es la señal.
     if (!error.code) {
       throw new ErrorReporte(
-        "Sin señal. Marcar un lugar nuevo necesita conexión; los reportes sobre lugares que ya existen sí funcionan sin ella.",
+        `No se pudo contactar el servidor. Si tienes señal, avisa de este detalle: ${
+          error.message ?? "sin detalle"
+        }`,
       );
     }
     traducir(error);
