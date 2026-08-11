@@ -231,23 +231,31 @@ export default function Pagina() {
     <main className="relative h-dvh w-full overflow-hidden bg-slate-950">
       <BarraGlobal datos={datos.global} />
 
-      {vista === "mapa" ? (
-        <div className="absolute inset-0">
-          <Mapa
-            puntos={puntosFiltrados}
-            calor={datos.calor}
-            mostrarCalor={mostrarCalor}
-            destino={destino}
-            onSeleccionar={seleccionar}
-            onClicMapa={(lat, lng) => {
-              if (colocando) {
-                setNuevoLugar({ lat, lng });
-                setColocando(false);
-              }
-            }}
-          />
-        </div>
-      ) : (
+      {/* El mapa no se desmonta al pasar a la lista. Recrearlo perdía el zoom y
+          la posición, y volvía a pedir todas las teselas: caro con mala señal y
+          justo el tipo de tráfico que la política de uso de OpenStreetMap pide
+          evitar. La lista es opaca, así que basta con ponerla encima. */}
+      <div
+        className="absolute inset-0"
+        aria-hidden={vista === "lista"}
+        inert={vista === "lista"}
+      >
+        <Mapa
+          puntos={puntosFiltrados}
+          calor={datos.calor}
+          mostrarCalor={mostrarCalor}
+          destino={destino}
+          onSeleccionar={seleccionar}
+          onClicMapa={(lat, lng) => {
+            if (colocando) {
+              setNuevoLugar({ lat, lng });
+              setColocando(false);
+            }
+          }}
+        />
+      </div>
+
+      {vista === "lista" && (
         <div className="lista">
           <ListaPuntos
             puntos={puntosFiltrados}
