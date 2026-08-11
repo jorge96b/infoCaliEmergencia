@@ -134,6 +134,23 @@ body {
     @apply sticky bottom-0 mt-4 rounded-xl border border-sky-700/50 bg-sky-950/95
            px-3 py-2.5 text-center text-sm text-sky-200;
   }
+
+  /* ------------------------------------------------------------------ */
+  /* Vista de lista                                                      */
+  /* Alternativa textual al mapa: se recorre por debajo de la barra de   */
+  /* cifras y por encima de los controles flotantes.                     */
+  /* ------------------------------------------------------------------ */
+  .lista {
+    @apply absolute inset-0 z-[900] overflow-y-auto bg-slate-950
+           pt-[52px] pb-24;
+  }
+
+  .tarjeta-punto {
+    @apply flex w-full items-start gap-3 rounded-xl border border-slate-800
+           bg-slate-900/80 p-3 text-left transition active:scale-[0.99]
+           active:bg-slate-800 focus:outline-none focus-visible:border-sky-500
+           focus-visible:ring-2 focus-visible:ring-sky-500/40;
+  }
 }
 
 /* ------------------------------------------------------------------ */

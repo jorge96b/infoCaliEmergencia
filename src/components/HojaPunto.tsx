@@ -41,6 +41,27 @@ export default function HojaPunto({
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
+  /** Comparte el enlace directo al punto; si no hay hoja nativa, lo copia. */
+  async function compartir() {
+    const url = `${window.location.origin}?p=${punto.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: punto.nombre,
+          text: `${punto.nombre} — ${punto.tipo_etiqueta}${punto.barrio ? ` · ${punto.barrio}` : ""}`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setAviso("Enlace copiado.");
+        setTimeout(() => setAviso(null), 4000);
+      }
+    } catch {
+      // La persona canceló la hoja de compartir, o el portapapeles no estaba
+      // disponible. No es un error que valga la pena mostrar.
+    }
+  }
+
   /** Envoltorio común: bloquea, ejecuta, avisa y refresca. */
   async function accion(fn: () => Promise<Resultado>, exito: string) {
     setOcupado(true);
@@ -99,9 +120,23 @@ export default function HojaPunto({
             )}
           </div>
         </div>
-        <button onClick={onCerrar} aria-label="Cerrar" className="btn-icono">
-          ✕
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${punto.lat},${punto.lng}`}
+            target="_blank"
+            rel="noopener"
+            aria-label="Cómo llegar"
+            className="btn-icono"
+          >
+            🧭
+          </a>
+          <button onClick={compartir} aria-label="Compartir" className="btn-icono">
+            🔗
+          </button>
+          <button onClick={onCerrar} aria-label="Cerrar" className="btn-icono">
+            ✕
+          </button>
+        </div>
       </header>
 
       {punto.descripcion && (
@@ -343,7 +378,11 @@ export default function HojaPunto({
         <Denunciar tabla="puntos" filaId={punto.id} ocupado={ocupado} accion={accion} />
       </div>
 
-      {aviso && <p className="aviso">{aviso}</p>}
+      {aviso && (
+        <p className="aviso" role="status" aria-live="polite">
+          {aviso}
+        </p>
+      )}
     </div>
   );
 }

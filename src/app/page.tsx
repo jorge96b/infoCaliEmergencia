@@ -1,15 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import BarraGlobal from "@/components/BarraGlobal";
 import CrearPunto from "@/components/CrearPunto";
 import EstadoConexion from "@/components/EstadoConexion";
+import Filtros from "@/components/Filtros";
 import HojaPunto from "@/components/HojaPunto";
+import ListaPuntos from "@/components/ListaPuntos";
 import { arrancarCola } from "@/lib/cola";
 import { cargarCatalogos, cargarInstantanea, miPresencia } from "@/lib/datos";
 import { idDispositivo } from "@/lib/dispositivo";
+import { aplicarFiltros, FILTROS_VACIOS, type FiltrosPuntos } from "@/lib/filtros";
 import { latido } from "@/lib/reportes";
 import { configurado } from "@/lib/supabase";
 import type { Instantanea, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
@@ -28,12 +31,26 @@ export default function Pagina() {
   const [datos, setDatos] = useState<Instantanea>({ puntos: [], calor: [], global: null });
   const [tipos, setTipos] = useState<TipoPunto[]>([]);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
-  const [seleccionado, setSeleccionado] = useState<string | null>(null);
+  // El punto abierto se siembra desde `?p=<id>` en el primer render (enlace
+  // profundo), sin un efecto que lo corrija después. La hoja se abrirá sola en
+  // cuanto ese punto llegue en la instantánea.
+  const [seleccionado, setSeleccionado] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("p"),
+  );
   const [colocando, setColocando] = useState(false);
   const [nuevoLugar, setNuevoLugar] = useState<{ lat: number; lng: number } | null>(null);
   const [presenciaEn, setPresenciaEn] = useState<string | null>(null);
   const [mostrarCalor, setMostrarCalor] = useState(true);
   const [destino, setDestino] = useState<[number, number] | null>(null);
+  // Última ubicación conocida de la persona. Se usa para volar el mapa y para
+  // ordenar la lista por cercanía; sólo se llena cuando toca "Ubicarme".
+  const [ubicacion, setUbicacion] = useState<[number, number] | null>(null);
+  const [vista, setVista] = useState<"mapa" | "lista">("mapa");
+  const [filtros, setFiltros] = useState<FiltrosPuntos>(FILTROS_VACIOS);
+  const [busqueda, setBusqueda] = useState("");
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
   // Sin Supabase configurado no hay nada que cargar, así que el estado inicial
@@ -143,6 +160,15 @@ export default function Pagina() {
     return arrancarCola();
   }, []);
 
+  // Mantener la URL en sincronía con el punto abierto, para que se pueda copiar
+  // y compartir el enlace a un punto concreto.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (seleccionado) url.searchParams.set("p", seleccionado);
+    else url.searchParams.delete("p");
+    window.history.replaceState(null, "", url);
+  }, [seleccionado]);
+
   // Mantener viva la sesión de presencia mientras la app esté abierta.
   useEffect(() => {
     if (!presenciaEn) return;
@@ -158,11 +184,27 @@ export default function Pagina() {
   function ubicarme() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => setDestino([pos.coords.latitude, pos.coords.longitude]),
+      (pos) => {
+        const aqui: [number, number] = [pos.coords.latitude, pos.coords.longitude];
+        setUbicacion(aqui);
+        setDestino(aqui);
+      },
       () => setError("No pudimos obtener tu ubicación. Puedes tocar el mapa a mano."),
       { enableHighAccuracy: true, timeout: 8000 },
     );
   }
+
+  // Los filtros se aplican una sola vez y alimentan tanto el mapa como la lista,
+  // para que ambas vistas muestren siempre el mismo subconjunto.
+  const puntosFiltrados = useMemo(
+    () => aplicarFiltros(datos.puntos, filtros, busqueda),
+    [datos.puntos, filtros, busqueda],
+  );
+
+  const seleccionar = useCallback((p: PuntoMapa) => {
+    setColocando(false);
+    setSeleccionado(p.id);
+  }, []);
 
   if (!configurado) {
     return (
@@ -180,35 +222,45 @@ export default function Pagina() {
     );
   }
 
+  // La hoja de un punto se abre desde la lista completa (no la filtrada) para que
+  // un enlace profundo o un punto ya abierto no desaparezca al filtrar.
   const punto = datos.puntos.find((p) => p.id === seleccionado) ?? null;
+  const hojaAbierta = !!punto || !!nuevoLugar || mostrarFiltros;
 
   return (
     <main className="relative h-dvh w-full overflow-hidden bg-slate-950">
       <BarraGlobal datos={datos.global} />
 
-      <div className="absolute inset-0">
-        <Mapa
-          puntos={datos.puntos}
-          calor={datos.calor}
-          mostrarCalor={mostrarCalor}
-          destino={destino}
-          onSeleccionar={(p: PuntoMapa) => {
-            setColocando(false);
-            setSeleccionado(p.id);
-          }}
-          onClicMapa={(lat, lng) => {
-            if (colocando) {
-              setNuevoLugar({ lat, lng });
-              setColocando(false);
-            }
-          }}
-        />
-      </div>
+      {vista === "mapa" ? (
+        <div className="absolute inset-0">
+          <Mapa
+            puntos={puntosFiltrados}
+            calor={datos.calor}
+            mostrarCalor={mostrarCalor}
+            destino={destino}
+            onSeleccionar={seleccionar}
+            onClicMapa={(lat, lng) => {
+              if (colocando) {
+                setNuevoLugar({ lat, lng });
+                setColocando(false);
+              }
+            }}
+          />
+        </div>
+      ) : (
+        <div className="lista">
+          <ListaPuntos
+            puntos={puntosFiltrados}
+            ubicacion={ubicacion}
+            onSeleccionar={seleccionar}
+          />
+        </div>
+      )}
 
       <EstadoConexion />
 
       {colocando && (
-        <div className="banner">
+        <div className="banner" role="status" aria-live="polite">
           Toca en el mapa el lugar exacto.
           <button onClick={() => setColocando(false)} className="ml-3 underline">
             Cancelar
@@ -216,33 +268,83 @@ export default function Pagina() {
         </div>
       )}
 
-      {mensaje && <div className="banner">{mensaje}</div>}
+      {mensaje && (
+        <div className="banner" role="status" aria-live="polite">
+          {mensaje}
+        </div>
+      )}
 
       {error && !colocando && !mensaje && (
-        <div className="banner banner-error">{error}</div>
+        <div className="banner banner-error" role="alert" aria-live="assertive">
+          {error}
+        </div>
       )}
 
       {cargando && (
-        <div className="banner">Cargando información…</div>
+        <div className="banner" role="status" aria-live="polite">
+          Cargando información…
+        </div>
       )}
 
-      {!punto && !nuevoLugar && (
+      {!hojaAbierta && (
         <div className="controles">
-          <button onClick={ubicarme} className="btn-flotante" aria-label="Ubicarme">
-            ◎
+          <button
+            onClick={() => setVista((v) => (v === "mapa" ? "lista" : "mapa"))}
+            className="btn-flotante"
+            aria-label={vista === "mapa" ? "Ver como lista" : "Ver el mapa"}
+            aria-pressed={vista === "lista"}
+          >
+            {vista === "mapa" ? "☰" : "🗺️"}
           </button>
           <button
-            onClick={() => setMostrarCalor((v) => !v)}
-            className={`btn-flotante ${mostrarCalor ? "btn-flotante-activo" : ""}`}
-            aria-label="Mapa de calor"
-            aria-pressed={mostrarCalor}
+            onClick={() => setMostrarFiltros(true)}
+            className={`btn-flotante ${
+              filtros.tipos.size > 0 || filtros.soloCriticos || busqueda.trim() !== ""
+                ? "btn-flotante-activo"
+                : ""
+            }`}
+            aria-label="Filtrar y buscar"
           >
-            🔥
+            🔍
           </button>
-          <button onClick={() => setColocando(true)} className="btn-fab">
+          {vista === "mapa" && (
+            <>
+              <button onClick={ubicarme} className="btn-flotante" aria-label="Ubicarme">
+                ◎
+              </button>
+              <button
+                onClick={() => setMostrarCalor((v) => !v)}
+                className={`btn-flotante ${mostrarCalor ? "btn-flotante-activo" : ""}`}
+                aria-label="Mapa de calor"
+                aria-pressed={mostrarCalor}
+              >
+                🔥
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => {
+              setVista("mapa");
+              setColocando(true);
+            }}
+            className="btn-fab"
+          >
             ＋ Marcar lugar
           </button>
         </div>
+      )}
+
+      {mostrarFiltros && (
+        <Filtros
+          tipos={tipos}
+          filtros={filtros}
+          busqueda={busqueda}
+          total={datos.puntos.length}
+          mostrados={puntosFiltrados.length}
+          onFiltros={setFiltros}
+          onBusqueda={setBusqueda}
+          onCerrar={() => setMostrarFiltros(false)}
+        />
       )}
 
       {punto && (
