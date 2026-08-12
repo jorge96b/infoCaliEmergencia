@@ -75,6 +75,7 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0011_push.sql
 0012_recursos_por_tipo.sql
 0013_personas_por_tipo.sql
+0014_puntos_oficiales.sql
 ```
 
 (Hay dos archivos `0008`. Tocan objetos distintos y el orden alfabético los
@@ -122,6 +123,21 @@ insert into puntos (nombre, tipo, lat, lng, barrio, origen, creado_por, client_i
 values ('Albergue Fulanito', 'albergue', 3.4520, -76.5290, 'San Fernando',
         'oficial', gen_random_uuid(), gen_random_uuid());
 ```
+
+Para los **cierres viales** hay algo mejor que el SQL. La Secretaría de Movilidad
+publica el listado varias veces al día, quince o veinte esquinas cada vez, y
+cargarlas a mano no se sostiene. En `/moderacion → Cierres` se pega el reporte
+entero y cada esquina se carga con un solo toque sobre el mapa; quedan como
+fuente oficial y con la línea original guardada en `direccion`, así que el
+reporte siguiente reconoce lo que ya estaba y no lo repite.
+
+Ese panel a propósito **no busca las coordenadas solo**. Ningún geocodificador
+resuelve bien "Calle 5 con Carrera 42": devuelve el centro de la calle, que en
+Cali puede quedar a kilómetros. La esquina la señala quien conoce la ciudad, y
+en una cuadrícula doscientos metros de error ya son otra esquina.
+
+Cuando una vía se reabre, el cierre se retira desde la cola de moderación —queda
+en la bitácora quién lo hizo— o con `update puntos set estado = 'cerrado'`.
 
 ### 5. Dar de alta a los moderadores
 
@@ -222,6 +238,7 @@ src/
     Denunciar.tsx        avisar de contenido falso u ofensivo
     AvisosPush.tsx       interruptor de notificaciones
     mod/                 el panel de moderación
+      CierresViales.tsx  carga guiada del reporte de cierres viales
   app/moderacion/        pantalla del panel (sin enlazar, con noindex)
   app/api/push/          ÚNICO código de servidor: envía las notificaciones
   lib/

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AccesoModeracion from "@/components/mod/AccesoModeracion";
 import Bitacora from "@/components/mod/Bitacora";
+import CierresViales from "@/components/mod/CierresViales";
 import PublicarAvisos from "@/components/mod/PublicarAvisos";
 import ColaDenuncias from "@/components/mod/ColaDenuncias";
 import FichaDispositivo from "@/components/mod/FichaDispositivo";
@@ -21,6 +22,8 @@ import {
   cargarAvisosMod,
   publicarAviso,
   retirarAviso,
+  crearPuntoOficial,
+  cargarPuntosDeTipo,
 } from "@/lib/moderacion";
 import { configurado } from "@/lib/supabaseModeracion";
 import type {
@@ -30,12 +33,13 @@ import type {
   Ficha,
   FilaCola,
   FilaDispositivo,
+  PuntoMapa,
   Salud,
 } from "@/lib/tipos";
 
 const REFRESCO_MS = 30_000;
 
-type Pestana = "cola" | "revisadas" | "avisos" | "bitacora";
+type Pestana = "cola" | "revisadas" | "avisos" | "cierres" | "bitacora";
 
 export default function PaginaModeracion() {
   const [estado, setEstado] = useState<"cargando" | "fuera" | "sinPermiso" | "dentro">(
@@ -46,6 +50,7 @@ export default function PaginaModeracion() {
   const [salud, setSalud] = useState<Salud | null>(null);
   const [bitacora, setBitacora] = useState<EntradaBitacora[]>([]);
   const [avisos, setAvisos] = useState<Aviso[]>([]);
+  const [cierres, setCierres] = useState<PuntoMapa[]>([]);
   const [ficha, setFicha] = useState<{ ficha: Ficha | null; filas: FilaDispositivo[] } | null>(
     null,
   );
@@ -60,6 +65,7 @@ export default function PaginaModeracion() {
       setSalud(s);
       if (p === "bitacora") setBitacora(await cargarBitacora());
       if (p === "avisos") setAvisos(await cargarAvisosMod());
+      if (p === "cierres") setCierres(await cargarPuntosDeTipo("via_bloqueada"));
       setError(null);
     } catch (e) {
       // Mismo criterio que en el mapa: no afirmar una causa que no se conoce, y
@@ -206,6 +212,7 @@ export default function PaginaModeracion() {
             ["cola", "Sin revisar"],
             ["revisadas", "Todo"],
             ["avisos", "Avisos"],
+            ["cierres", "Cierres"],
             ["bitacora", "Bitácora"],
           ] as [Pestana, string][]
         ).map(([id, texto]) => (
@@ -229,6 +236,24 @@ export default function PaginaModeracion() {
 
       {pestana === "bitacora" ? (
         <Bitacora entradas={bitacora} />
+      ) : pestana === "cierres" ? (
+        <CierresViales
+          puntos={cierres}
+          ocupado={ocupado}
+          onColocar={async (nombre, texto, lat, lng) => {
+            await crearPuntoOficial({
+              nombre,
+              tipo: "via_bloqueada",
+              lat,
+              lng,
+              direccion: texto,
+            });
+            // Se recarga la capa para que el cierre recién puesto salga como
+            // marcador: es la comprobación de que quedó donde se quería.
+            setCierres(await cargarPuntosDeTipo("via_bloqueada"));
+          }}
+          onRecargar={() => void refrescar("cierres")}
+        />
       ) : pestana === "avisos" ? (
         <PublicarAvisos
           avisos={avisos}

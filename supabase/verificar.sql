@@ -38,7 +38,8 @@ funciones(nombre) as (values
   ('rpc_denunciar'), ('es_moderador'), ('rpc_mod_decidir'), ('rpc_mod_bloquear'),
   ('fn_rejilla'), ('rpc_push_suscribir'), ('rpc_push_ubicacion'), ('rpc_push_baja'),
   ('rpc_push_destinatarios'), ('rpc_push_reservar'), ('rpc_push_resultado'),
-  ('rpc_push_barrido'), ('rpc_push_ahora'), ('rpc_push_liberar')),
+  ('rpc_push_barrido'), ('rpc_push_ahora'), ('rpc_push_liberar'),
+  ('rpc_mod_crear_punto')),
 
 -- Funciones que sólo puede ejecutar el servidor con la clave de servicio.
 -- `rpc_push_destinatarios` devuelve endpoints de notificación, que son

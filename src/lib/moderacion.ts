@@ -1,3 +1,4 @@
+import { idDispositivo } from "./dispositivo";
 import { supabaseModeracion } from "./supabaseModeracion";
 import type {
   Decision,
@@ -10,6 +11,7 @@ import type {
   Aviso,
   SeveridadAviso,
   TipoAviso,
+  PuntoMapa,
 } from "./tipos";
 
 /**
@@ -232,4 +234,46 @@ export async function publicarReporte(r: {
     p_servicios: r.servicios?.trim() || null,
   });
   if (error) throw new Error(mensaje(error));
+}
+
+/**
+ * Puntos oficiales cargados desde el panel.
+ *
+ * La coordenada llega de un clic sobre el mapa, nunca de una búsqueda
+ * automática. Es la única garantía de que un cierre vial queda en la esquina
+ * donde está y no a dos cuadras: en una ciudad en cuadrícula, doscientos metros
+ * de error ya son otra esquina, y el error se descubre cuando alguien llega.
+ */
+export async function crearPuntoOficial(p: {
+  nombre: string;
+  tipo: string;
+  lat: number;
+  lng: number;
+  direccion?: string;
+  descripcion?: string;
+  barrio?: string;
+}): Promise<string> {
+  const { data, error } = await supabaseModeracion().rpc("rpc_mod_crear_punto", {
+    p_nombre: p.nombre.trim(),
+    p_tipo: p.tipo,
+    p_lat: p.lat,
+    p_lng: p.lng,
+    p_dispositivo: idDispositivo(),
+    p_client_id: crypto.randomUUID(),
+    p_direccion: p.direccion?.trim() || null,
+    p_descripcion: p.descripcion?.trim() || null,
+    p_barrio: p.barrio?.trim() || null,
+  });
+  if (error) throw new Error(mensaje(error));
+  return data as string;
+}
+
+/** Los puntos de un tipo, para dibujarlos mientras se cargan los que faltan. */
+export async function cargarPuntosDeTipo(tipo: string): Promise<PuntoMapa[]> {
+  const { data, error } = await supabaseModeracion()
+    .from("v_puntos_mapa")
+    .select("*")
+    .eq("tipo", tipo);
+  if (error) throw error;
+  return (data ?? []) as PuntoMapa[];
 }
