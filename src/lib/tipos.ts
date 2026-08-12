@@ -92,6 +92,45 @@ export type Instantanea = {
 };
 
 // ---------------------------------------------------------------------------
+// Línea de tiempo
+// ---------------------------------------------------------------------------
+
+export type TipoEvento = "falta" | "llego" | "hay" | "personas" | "lugar_nuevo";
+
+/**
+ * Una fila de `v_actividad`: un reporte individual, no un agregado. Es el único
+ * tipo del proyecto que representa una fila suelta de las tablas de reportes;
+ * todo lo demás llega ya resumido por punto.
+ *
+ * `tabla` es exactamente `TablaDenunciable` —el tipo se declara más abajo, que
+ * en TypeScript da igual— para que cada evento se pueda pasar tal cual a
+ * `<Denunciar>` sin conversiones: sin eso, la línea de tiempo mostraría
+ * contenido de usuario sin ninguna forma de reportarlo.
+ */
+export type Evento = {
+  tabla: TablaDenunciable;
+  fila_id: string;
+  punto_id: string;
+  punto: string;
+  barrio: string | null;
+  punto_emoji: string;
+  lat: number;
+  lng: number;
+  /** `efectivo_en`: cuándo se observó. Es el criterio de orden. */
+  ocurrido_en: string;
+  /** `creado_en`: cuándo llegó al servidor. Difiere si estuvo en la cola. */
+  recibido_en: string;
+  /** Del recurso o del tipo de lugar. Nulo en los conteos de personas. */
+  emoji: string | null;
+  etiqueta: string | null;
+  accion: TipoEvento;
+  /** `nivel_stock` o `estado_persona`, según `accion`. */
+  nivel: string | null;
+  cantidad: number | null;
+  nota: string | null;
+};
+
+// ---------------------------------------------------------------------------
 // Moderación
 //
 // Los dos primeros reflejan los `check` de `reportes_abuso` (0001). Si cambian

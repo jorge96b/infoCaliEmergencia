@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import BarraGlobal from "@/components/BarraGlobal";
 import CrearPunto from "@/components/CrearPunto";
 import EstadoConexion from "@/components/EstadoConexion";
+import HojaActividad from "@/components/HojaActividad";
 import HojaPunto from "@/components/HojaPunto";
 import { arrancarCola } from "@/lib/cola";
 import { cargarCatalogos, cargarInstantanea, miPresencia } from "@/lib/datos";
@@ -33,6 +34,7 @@ export default function Pagina() {
   const [nuevoLugar, setNuevoLugar] = useState<{ lat: number; lng: number } | null>(null);
   const [presenciaEn, setPresenciaEn] = useState<string | null>(null);
   const [mostrarCalor, setMostrarCalor] = useState(true);
+  const [actividad, setActividad] = useState(false);
   const [destino, setDestino] = useState<[number, number] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mensaje, setMensaje] = useState<string | null>(null);
@@ -194,6 +196,9 @@ export default function Pagina() {
           destino={destino}
           onSeleccionar={(p: PuntoMapa) => {
             setColocando(false);
+            // El mapa se sigue pudiendo tocar por detrás de la línea de tiempo;
+            // sin esto quedarían dos hojas apiladas.
+            setActividad(false);
             setSeleccionado(p.id);
           }}
           onClicMapa={(lat, lng) => {
@@ -226,7 +231,7 @@ export default function Pagina() {
         <div className="banner">Cargando información…</div>
       )}
 
-      {!punto && !nuevoLugar && (
+      {!punto && !nuevoLugar && !actividad && (
         <div className="controles">
           <button onClick={ubicarme} className="btn-flotante" aria-label="Ubicarme">
             ◎
@@ -239,10 +244,31 @@ export default function Pagina() {
           >
             🔥
           </button>
+          <button
+            onClick={() => setActividad(true)}
+            className="btn-flotante"
+            aria-label="Lo que se está reportando"
+          >
+            🕒
+          </button>
           <button onClick={() => setColocando(true)} className="btn-fab">
             ＋ Marcar lugar
           </button>
         </div>
+      )}
+
+      {actividad && !punto && !nuevoLugar && (
+        <HojaActividad
+          onCerrar={() => setActividad(false)}
+          onIrAPunto={(e) => {
+            // Volar hasta el lugar y abrir su ficha. Si el punto desapareció
+            // entre refrescos, `punto` queda nulo y la ficha no se abre; el
+            // mapa igual se mueve, que es mejor que no responder al toque.
+            setDestino([e.lat, e.lng]);
+            setSeleccionado(e.punto_id);
+            setActividad(false);
+          }}
+        />
       )}
 
       {punto && (

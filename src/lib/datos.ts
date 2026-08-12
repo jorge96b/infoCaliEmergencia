@@ -1,5 +1,13 @@
 import { supabase } from "./supabase";
-import type { Global, Instantanea, PuntoCalor, PuntoMapa, Recurso, TipoPunto } from "./tipos";
+import type {
+  Evento,
+  Global,
+  Instantanea,
+  PuntoCalor,
+  PuntoMapa,
+  Recurso,
+  TipoPunto,
+} from "./tipos";
 
 /**
  * Toda la lectura de la aplicación pasa por aquí.
@@ -54,6 +62,25 @@ export async function cargarInstantanea(): Promise<Instantanea> {
     // El tablero global es accesorio: si falla, el mapa igual debe dibujarse.
     global: (global.data as Global | null) ?? null,
   };
+}
+
+/**
+ * Lo que se ha reportado en las últimas 24 h, lo más reciente primero.
+ *
+ * Va aparte de `cargarInstantanea` a propósito. La instantánea se pide cada 20 s
+ * pase lo que pase, y colgarle sesenta eventos por vuelta sería tráfico
+ * permanente contra el límite del plan gratuito para una lista que casi nunca
+ * está abierta. Esta se pide sólo mientras la hoja se ve, con su propio reloj.
+ */
+export async function cargarActividad(limite = 60): Promise<Evento[]> {
+  const { data, error } = await supabase()
+    .from("v_actividad")
+    .select("*")
+    .order("ocurrido_en", { ascending: false })
+    .limit(limite);
+
+  if (error) throw error;
+  return (data ?? []) as Evento[];
 }
 
 export async function miPresencia(dispositivo: string): Promise<string | null> {

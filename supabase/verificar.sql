@@ -21,6 +21,7 @@ tablas(nombre) as (values
 vistas(nombre) as (values
   ('v_necesidades'), ('v_insumos'), ('v_presencia'), ('v_personas'),
   ('v_verificacion'), ('v_puntos_mapa'), ('v_mapa_calor'), ('v_global'),
+  ('v_actividad'),
   ('v_filas_denunciables'), ('v_cola_moderacion'), ('v_ficha_dispositivo'),
   ('v_salud_moderacion'), ('v_bitacora')),
 
