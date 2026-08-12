@@ -218,6 +218,48 @@ body {
   text-align: center;
 }
 
+/* Esquina propuesta por el buscador y todavía sin confirmar. Va translúcida y
+   punteada para que se lea de un vistazo que no está guardada: lo peligroso
+   sería que se confundiera con un cierre ya cargado. */
+.propuesta {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  border: 2px dashed #f59e0b;
+  background: rgb(15 23 42 / 0.75);
+  color: #fde68a;
+  font-size: 14px;
+  position: relative;
+}
+
+.propuesta-dudosa {
+  border-color: #f87171;
+  color: #fecaca;
+  font-weight: 700;
+}
+
+/* El nombre al lado del pin: con dieciocho propuestas juntas, un mapa de puntos
+   idénticos no se puede revisar. */
+.propuesta-etiqueta {
+  position: absolute;
+  left: 34px;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: 40vw;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(15 23 42 / 0.85);
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* El CSS de Leaflet se importa desde el componente del mapa, así que se carga
    después de esta hoja y gana por orden. De ahí la especificidad extra: sin
    ella el lienzo queda gris claro mientras cargan las teselas, que con pantalla

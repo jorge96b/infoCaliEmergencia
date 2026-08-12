@@ -6,7 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
 
-import type { PuntoCalor, PuntoMapa } from "@/lib/tipos";
+import type { PropuestaMapa, PuntoCalor, PuntoMapa } from "@/lib/tipos";
 
 export const CALI: [number, number] = [3.4516, -76.532];
 
@@ -30,6 +30,26 @@ function icono(p: PuntoMapa): L.DivIcon {
       </div>`,
     iconSize: [38, 38],
     iconAnchor: [19, 19],
+  });
+}
+
+/**
+ * Marcador de una esquina propuesta pero sin confirmar.
+ *
+ * Se distingue a propósito de los marcadores de verdad —translúcido, con el
+ * nombre al lado— porque la diferencia entre "esto está en el mapa" y "esto es
+ * lo que encontró el buscador" es justo la que tiene que revisar una persona.
+ */
+function iconoPropuesta(p: PropuestaMapa): L.DivIcon {
+  return L.divIcon({
+    className: "",
+    html: `
+      <div class="propuesta ${p.dudosa ? "propuesta-dudosa" : ""}">
+        <span>${p.dudosa ? "?" : "🚧"}</span>
+        <b class="propuesta-etiqueta">${p.etiqueta.replace(/</g, "&lt;")}</b>
+      </div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
   });
 }
 
@@ -84,6 +104,7 @@ export default function Mapa({
   onSeleccionar,
   onClicMapa,
   destino,
+  propuestas = [],
 }: {
   puntos: PuntoMapa[];
   calor: PuntoCalor[];
@@ -91,6 +112,8 @@ export default function Mapa({
   onSeleccionar: (p: PuntoMapa) => void;
   onClicMapa?: (lat: number, lng: number) => void;
   destino: [number, number] | null;
+  /** Esquinas encontradas por el buscador y aún sin confirmar. */
+  propuestas?: PropuestaMapa[];
 }) {
   const marcadores = useMemo(
     () =>
@@ -124,6 +147,14 @@ export default function Mapa({
       <CapturarClic onClic={onClicMapa} />
       <IrA destino={destino} />
       {marcadores}
+      {propuestas.map((p) => (
+        <Marker
+          key={p.clave}
+          position={[p.lat, p.lng]}
+          icon={iconoPropuesta(p)}
+          interactive={false}
+        />
+      ))}
     </MapContainer>
   );
 }

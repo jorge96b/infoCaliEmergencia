@@ -86,6 +86,19 @@ export type PuntoMapa = {
 
 export type PuntoCalor = { lat: number; lng: number; intensidad: number };
 
+/**
+ * Una esquina que el buscador encontró y que todavía nadie ha confirmado. Se
+ * dibuja distinto de un punto guardado justamente para que no se confundan:
+ * hasta que alguien la mire, es una propuesta.
+ */
+export type PropuestaMapa = {
+  clave: string;
+  lat: number;
+  lng: number;
+  etiqueta: string;
+  dudosa: boolean;
+};
+
 export type Global = {
   puntos_activos: number;
   personas_en_terreno: number;
