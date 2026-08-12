@@ -1,5 +1,6 @@
 "use client";
 
+import AvisosPush from "@/components/AvisosPush";
 import { SEVERIDAD, TIPO_AVISO, fechaHora, haceCuanto, vigencia } from "@/lib/formato";
 import type { Aviso, ReporteOficial } from "@/lib/tipos";
 
@@ -95,6 +96,8 @@ export default function HojaAvisos({
           ✕
         </button>
       </header>
+
+      <AvisosPush />
 
       {avisos.length === 0 && !reporte && (
         <p className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 text-sm text-slate-400">

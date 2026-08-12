@@ -16,6 +16,7 @@ import { arrancarCola } from "@/lib/cola";
 import { cargarCatalogos, cargarInstantanea, cargarOficial, miPresencia } from "@/lib/datos";
 import { idDispositivo } from "@/lib/dispositivo";
 import { aplicarFiltros, FILTROS_VACIOS, type FiltrosPuntos } from "@/lib/filtros";
+import { guardarUbicacion, reconciliarPush } from "@/lib/push";
 import { latido } from "@/lib/reportes";
 import { configurado, problemaConfiguracion } from "@/lib/supabase";
 import type { Instantanea, Oficial, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
@@ -168,12 +169,35 @@ export default function Pagina() {
               .map((r) => r.name)
               .filter((u) => u.includes("/_next/static/")),
           });
+
+          // El navegador rota los endpoints de push por su cuenta. `sw.js`
+          // rehace la suscripción cuando pasa, pero no escribe en la base —ahí
+          // no pasa ninguna escritura—, así que la reconciliación es aquí.
+          void reconciliarPush();
         })
         .catch(() => {
           // Sin service worker la app funciona igual, sólo pierde el modo offline.
         });
     }
     return arrancarCola();
+  }, []);
+
+  // Al tocar una notificación con la app ya abierta, `sw.js` avisa por mensaje
+  // en vez de navegar: navegar recargaría la página y se perderían el zoom del
+  // mapa y las teselas ya cargadas, que es caro con mala señal.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    const alMensaje = (evento: MessageEvent) => {
+      if (evento.data?.tipo !== "ir-a-punto") return;
+      setActividad(false);
+      setAvisos(false);
+      setMostrarFiltros(false);
+      if (typeof evento.data.punto_id === "string") setSeleccionado(evento.data.punto_id);
+    };
+
+    navigator.serviceWorker.addEventListener("message", alMensaje);
+    return () => navigator.serviceWorker.removeEventListener("message", alMensaje);
   }, []);
 
   // Enlace profundo: al abrir `?p=<id>` se preselecciona ese punto y la hoja se
@@ -255,6 +279,14 @@ export default function Pagina() {
         const aqui: [number, number] = [pos.coords.latitude, pos.coords.longitude];
         setUbicacion(aqui);
         setDestino(aqui);
+        // La exacta se queda en este teléfono, para que el service worker pueda
+        // afinar la prioridad de una notificación sin preguntarle a nadie; al
+        // servidor sólo sube redondeada a ~1 km, y sólo si los avisos están
+        // activados. Ver `lib/push.ts`.
+        void guardarUbicacion(aqui[0], aqui[1]).catch(() => {
+          // Accesorio: sin esto el mapa se centra igual y los avisos siguen
+          // llegando, sólo pierden la prioridad por cercanía.
+        });
       },
       () => setError("No pudimos obtener tu ubicación. Puedes tocar el mapa a mano."),
       { enableHighAccuracy: true, timeout: 8000 },

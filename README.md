@@ -68,7 +68,15 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0005_semilla.sql
 0006_rls_catalogos.sql
 0007_moderacion.sql
+0008_actividad.sql
+0008_recurso_otro.sql
+0009_avisos.sql
+0010_semilla_avisos.sql
+0011_push.sql
 ```
+
+(Hay dos archivos `0008`. Tocan objetos distintos y el orden alfabético los
+ordena bien, pero la colisión es real: por eso el siguiente es `0009`.)
 
 Luego **comprueba que quedó bien** — no lo des por hecho. Pega
 `supabase/verificar.sql`: revisa tabla por tabla que todo exista, que RLS esté
@@ -135,8 +143,67 @@ mapa ya lleno de gente.
 
 ### 6. Desplegar
 
-Importa el repositorio en Vercel y define las dos variables de entorno. No hace
-falta nada más.
+Importa el repositorio en Vercel y define las dos variables de entorno. Con eso
+la app funciona entera. Las notificaciones push son un añadido aparte y opcional
+—paso 7— y necesitan cinco variables más.
+
+### 7. Notificaciones push (opcional)
+
+Sin esto la app funciona igual y el interruptor de avisos ni siquiera aparece en
+pantalla.
+
+Es la única parte del proyecto con **código de servidor propio**. Todo lo demás
+va del navegador a Supabase con la `anon key`, que es pública por diseño; firmar
+un push exige una clave privada, y una clave privada no puede vivir en el
+navegador.
+
+**Genera las claves VAPID una sola vez** y guárdalas:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Cambiarlas más adelante invalida todas las suscripciones existentes y hay que
+volver a pedir permiso teléfono por teléfono. No es reversible desde el servidor.
+
+**Define en Vercel** (Settings → Environment Variables) las cinco de
+`.env.example`: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+`VAPID_SUBJECT`, `SUPABASE_SERVICE_ROLE_KEY` y `PUSH_WEBHOOK_SECRET`. Sólo la
+primera lleva `NEXT_PUBLIC_`; las otras cuatro **no pueden llevarlo**, o acaban
+en el JavaScript que descarga cualquiera.
+
+**Conecta el disparador instantáneo.** En Supabase, *Database → Webhooks*, crea
+uno para la tabla `avisos` y otro para `reportes_oficiales`, ambos sólo en
+`INSERT`, apuntando por POST a `https://TU-DOMINIO/api/push/enviar` con la
+cabecera `x-push-secret: <PUSH_WEBHOOK_SECRET>`.
+
+**Programa el barrido de comunidad.** En el SQL Editor:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule('push-barrido', '*/3 * * * *', $$
+  select net.http_post(
+    url     := 'https://TU-DOMINIO/api/push/barrer',
+    headers := '{"Content-Type":"application/json","x-push-secret":"EL_SECRETO"}'::jsonb,
+    body    := '{}'::jsonb
+  );
+$$);
+```
+
+No se usa Vercel Cron porque en el plan Hobby está limitado a una ejecución
+diaria. Los Webhooks de Supabase son `pg_net` por dentro, así que las dos vías
+acaban compartiendo mecanismo.
+
+**Comprueba que quedó bien** volviendo a pegar `supabase/verificar.sql`: el
+bloque *Push* confirma que `anon` no puede ejecutar las funciones de servidor
+—las que devuelven endpoints, que son credenciales de envío— y que las
+ubicaciones guardadas están redondeadas.
+
+En **iPhone y iPad** el push sólo existe si la app está añadida a la pantalla de
+inicio (iOS 16.4+). La app lo detecta y lo explica en vez de enseñar un
+interruptor que no haría nada.
 
 ---
 
@@ -151,14 +218,20 @@ src/
     CrearPunto.tsx       marcar un lugar nuevo
     BarraGlobal.tsx      cifras de toda la ciudad
     Denunciar.tsx        avisar de contenido falso u ofensivo
+    AvisosPush.tsx       interruptor de notificaciones
     mod/                 el panel de moderación
   app/moderacion/        pantalla del panel (sin enlazar, con noindex)
+  app/api/push/          ÚNICO código de servidor: envía las notificaciones
   lib/
     datos.ts             TODA la lectura
     reportes.ts          TODA la escritura
     supabase.ts          cliente, con el id de dispositivo en la cabecera
     moderacion.ts        lectura y escritura del panel
     supabaseModeracion.ts  cliente aparte, con sesión de Supabase Auth
+    push.ts              alta y baja de notificaciones, desde el navegador
+    pushServidor.ts      envío con clave VAPID y clave de servicio
+    pushTramos.ts        prioridad de entrega según la distancia
+public/sw.js             caché offline y recepción de las notificaciones
 supabase/migrations/     esquema, vistas, RLS y RPC
 ```
 
@@ -173,6 +246,40 @@ lanzar ningún error*: una app de emergencia que se queda callada sin avisar es
 peor que una que refresca cada 20 s. Además el puntaje cambia con el paso del
 tiempo aunque no entren datos nuevos, así que refrescar por reloj hace falta de
 todos modos.
+
+### Notificaciones: prioridad por cercanía
+
+El sondeo sirve con la app abierta y no sirve de nada con el teléfono en el
+bolsillo, que es justo cuando un toque de queda o una zona nueva de derrumbe
+importan. De ahí el push, con dos vías distintas y por un motivo concreto:
+
+- **Lo oficial va al instante**, por un webhook sobre el INSERT de `avisos` y
+  `reportes_oficiales`. Poco volumen, sólo lo escriben moderadores, y la latencia
+  importa: un toque de queda que empieza a las 6 p. m. no sirve a las 6:03.
+- **Lo de la comunidad va por barrido cada 3 minutos.** No es pereza: la etiqueta
+  `muy_requerido` no es una columna, es un nivel de consenso que `v_necesidades`
+  calcula con decaimiento y que cambia con el paso del tiempo aunque no entre
+  ningún reporte. No hay INSERT que observar, hay que comparar contra el nivel
+  anterior. El barrido además **agrupa por dispositivo**, así que tres
+  necesidades críticas en el mismo barrio son un aviso y no tres: el límite de
+  tasa deja de ser una heurística y pasa a ser una consecuencia del período.
+
+La prioridad por distancia usa `Urgency`, una cabecera del propio protocolo Web
+Push, no un adorno nuestro: el servicio de push la usa para decidir si despierta
+un teléfono en ahorro de batería. Menos de 2 km va como `high` y vibra; entre 2 y
+8 km, `normal` y en silencio; más lejos sólo pasa lo crítico. Los avisos de
+ciudad no tienen coordenadas y llegan a todo el mundo, con la urgencia que marque
+su severidad.
+
+Para eso hace falta saber **algo** de dónde está cada teléfono, y es la única
+parte de la app donde la ubicación sale del dispositivo. Se guarda redondeada a
+dos decimales —poco más de un kilómetro—, sólo con las notificaciones activadas,
+y el redondeo se aplica también en el servidor, porque una promesa de "sólo
+aproximada" tiene que ser cierta en el lado que la guarda. La posición exacta se
+queda en IndexedDB y la lee el service worker para afinar la distancia real antes
+de mostrar el aviso — pero sólo puede **suavizarlo, nunca callarlo**: una
+posición vieja no es motivo para silenciar una alerta crítica, y Chrome además
+penaliza los push que no muestran nada.
 
 ### Control de abuso
 
