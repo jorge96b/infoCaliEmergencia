@@ -31,12 +31,15 @@ const VOLUNTARIOS = "voluntarios";
 export default function HojaPunto({
   punto,
   recursos,
+  porTipo,
   aqui,
   onCerrar,
   onCambio,
 }: {
   punto: PuntoMapa;
   recursos: Recurso[];
+  /** Qué recursos vienen al caso en cada tipo de lugar, agrupados por tipo. */
+  porTipo: Record<string, Recurso[]>;
   aqui: boolean;
   onCerrar: () => void;
   onCambio: () => void;
@@ -90,17 +93,26 @@ export default function HojaPunto({
     }
   }
 
-  const destacados = recursos.filter((r) => r.destacado);
+  // Lo que se pide en un albergue no es lo que se pide en un colapso: la
+  // grilla se arma con la lista del tipo de este punto. El respaldo a los
+  // destacados de siempre es por si un tipo se quedara sin lista; más vale una
+  // grilla genérica que una vacía.
+  const delTipo = porTipo[punto.tipo] ?? [];
+  const base = delTipo.length > 0 ? delTipo : recursos.filter((r) => r.destacado);
+
   const yaPedidos = new Set(punto.necesidades.map((n) => n.recurso));
 
   // "Otra cosa" sale de la grilla rápida y se maneja aparte: es lo único que no
   // se puede reportar de un toque, porque sin el texto no dice nada. Y a
   // diferencia del resto no se esconde cuando ya se pidió una vez, porque la
   // siguiente puede ser una cosa distinta.
-  const otro = destacados.find((r) => r.slug === OTRO);
+  // `otro` se busca en el catálogo completo y no en la lista del tipo: no
+  // pertenece a ningún tipo en particular, y ahora es la única vía para
+  // reportar algo que nadie previó.
+  const otro = recursos.find((r) => r.slug === OTRO);
   // Voluntarios sale de la grilla: tiene su propio bloque arriba y pedir lo
   // mismo en dos sitios sólo confunde sobre cuál de los dos cuenta.
-  const rapidos = destacados.filter(
+  const rapidos = base.filter(
     (r) => r.slug !== OTRO && r.slug !== VOLUNTARIOS && !yaPedidos.has(r.slug),
   );
 
@@ -109,6 +121,10 @@ export default function HojaPunto({
   // se le da en pantalla.
   const voluntarios = punto.necesidades.find((n) => n.recurso === VOLUNTARIOS) ?? null;
   const otrasNecesidades = punto.necesidades.filter((n) => n.recurso !== VOLUNTARIOS);
+
+  // "Qué hay" usa la misma lista del tipo. `otro` no cabe aquí: no se puede
+  // reportar cuánto hay de un texto libre.
+  const disponibles = base.filter((r) => r.slug !== OTRO);
 
   async function enviarOtro() {
     const texto = libre.trim();
@@ -445,7 +461,11 @@ export default function HojaPunto({
             <p className="text-sm text-slate-400">
               ¿Cuánto hay ahora mismo? Toca el recurso y luego la cantidad.
             </p>
-            {destacados.slice(0, 8).map((r) => (
+            {/* Antes cortaba en los ocho primeros destacados, sin ningún
+                criterio: bastaba añadir un recurso con `orden` bajo para que
+                los medicamentos desaparecieran de aquí sin que nadie lo notara.
+                Ahora es la lista del tipo, completa. */}
+            {disponibles.map((r) => (
               <div key={r.slug} className="rounded-xl border border-slate-700 p-2.5">
                 <p className="mb-2 text-sm font-medium text-slate-200">
                   {r.emoji} {r.etiqueta}

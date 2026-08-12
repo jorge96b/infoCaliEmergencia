@@ -18,14 +18,16 @@ tablas(nombre) as (values
   ('persona_reportes'), ('presencia'), ('reportes_abuso'),
   ('moderadores'), ('decisiones_moderacion'), ('acciones_moderacion'),
   ('avisos'), ('reportes_oficiales'),
-  ('suscripciones_push'), ('envios_push'), ('nivel_notificado')),
+  ('suscripciones_push'), ('envios_push'), ('nivel_notificado'),
+  ('recursos_por_tipo')),
 
 vistas(nombre) as (values
   ('v_necesidades'), ('v_insumos'), ('v_presencia'), ('v_personas'),
   ('v_verificacion'), ('v_puntos_mapa'), ('v_mapa_calor'), ('v_global'),
   ('v_actividad'),
   ('v_filas_denunciables'), ('v_cola_moderacion'), ('v_ficha_dispositivo'),
-  ('v_salud_moderacion'), ('v_bitacora')),
+  ('v_salud_moderacion'), ('v_bitacora'),
+  ('v_avisos'), ('v_reporte_oficial'), ('v_recursos_tipo')),
 
 funciones(nombre) as (values
   ('peso'), ('metros'), ('dispositivo_actual'), ('fn_asegurar_dispositivo'),
@@ -64,7 +66,9 @@ vedadas_a_anon(nombre) as (values
   -- futuros o vencidos.
   ('avisos'), ('reportes_oficiales'),
   -- Un `endpoint` de push con sus claves es una credencial de envío.
-  ('suscripciones_push'), ('envios_push'), ('nivel_notificado')),
+  ('suscripciones_push'), ('envios_push'), ('nivel_notificado'),
+  -- `anon` lee `v_recursos_tipo`, que ya viene unida y ordenada; la tabla no.
+  ('recursos_por_tipo')),
 
 -- Índices únicos que sostienen el control de abuso. Si alguno falta, un solo
 -- dispositivo podría mover el puntaje de una necesidad sin límite.
@@ -157,6 +161,19 @@ comprobaciones as (
          ', personal ' || count(*) filter (where categoria = 'personal'),
          '·'
   from recursos
+
+  -- Un tipo sin lista no rompe nada —la ficha cae de vuelta en los recursos
+  -- destacados—, y por eso mismo hay que mirarlo aquí: si no, nadie se entera
+  -- de que en los albergues volvieron a salir volquetas.
+  union all
+  select 7, 'Catálogos',
+         'recursos por tipo (' ||
+         (select count(*) from recursos_por_tipo) || ' filas, ' ||
+         count(*) filter (where not tp.tiene) || ' tipos sin lista)',
+         case when count(*) filter (where not tp.tiene) = 0 then '✓'
+              else '⚠ esos tipos muestran la lista genérica' end
+  from (select exists (select 1 from recursos_por_tipo rt where rt.tipo = t.slug)
+        from tipos_punto t where t.activo) as tp (tiene)
 
   -- Un mapa vacío es un mapa muerto: la primera persona que llegue tiene que
   -- encontrar algo útil.

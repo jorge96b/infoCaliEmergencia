@@ -32,19 +32,31 @@ import type {
 export async function cargarCatalogos(): Promise<{
   tipos: TipoPunto[];
   recursos: Recurso[];
+  porTipo: Record<string, Recurso[]>;
 }> {
   const sb = supabase();
-  const [tipos, recursos] = await Promise.all([
+  const [tipos, recursos, porTipo] = await Promise.all([
     sb.from("tipos_punto").select("*").eq("activo", true).order("orden"),
     sb.from("recursos").select("*").eq("activo", true).order("orden"),
+    // Qué recursos vienen al caso en cada tipo de lugar. La vista ya llega
+    // unida y ordenada por el orden propio de cada tipo.
+    sb.from("v_recursos_tipo").select("*"),
   ]);
 
   if (tipos.error) throw tipos.error;
   if (recursos.error) throw recursos.error;
+  if (porTipo.error) throw porTipo.error;
+
+  // Se agrupa una sola vez aquí y no en cada render de la ficha del punto.
+  const agrupado: Record<string, Recurso[]> = {};
+  for (const fila of (porTipo.data ?? []) as (Recurso & { tipo: string })[]) {
+    (agrupado[fila.tipo] ??= []).push(fila);
+  }
 
   return {
     tipos: (tipos.data ?? []) as TipoPunto[],
     recursos: (recursos.data ?? []) as Recurso[],
+    porTipo: agrupado,
   };
 }
 

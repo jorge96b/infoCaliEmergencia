@@ -73,6 +73,7 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0009_avisos.sql
 0010_semilla_avisos.sql
 0011_push.sql
+0012_recursos_por_tipo.sql
 ```
 
 (Hay dos archivos `0008`. Tocan objetos distintos y el orden alfabético los

@@ -35,6 +35,8 @@ export default function Pagina() {
   const [datos, setDatos] = useState<Instantanea>({ puntos: [], calor: [], global: null });
   const [tipos, setTipos] = useState<TipoPunto[]>([]);
   const [recursos, setRecursos] = useState<Recurso[]>([]);
+  // Qué recursos vienen al caso en cada tipo de lugar, agrupados por tipo.
+  const [porTipo, setPorTipo] = useState<Record<string, Recurso[]>>({});
   const [seleccionado, setSeleccionado] = useState<string | null>(null);
   const [colocando, setColocando] = useState(false);
   const [nuevoLugar, setNuevoLugar] = useState<{ lat: number; lng: number } | null>(null);
@@ -102,6 +104,7 @@ export default function Pagina() {
       if (cat.tipos.length === 0 || cat.recursos.length === 0) return;
       setTipos(cat.tipos);
       setRecursos(cat.recursos);
+      setPorTipo(cat.porTipo);
       catalogosListos.current = true;
     } catch {
       // Se reintenta en el siguiente ciclo; el detalle del fallo lo da `refrescar`.
@@ -533,6 +536,7 @@ export default function Pagina() {
         <HojaPunto
           punto={punto}
           recursos={recursos}
+          porTipo={porTipo}
           aqui={presenciaEn === punto.id}
           onCerrar={() => setSeleccionado(null)}
           onCambio={trasCambio}
