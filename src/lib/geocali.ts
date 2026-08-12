@@ -98,7 +98,24 @@ export function normalizar(texto: string): string {
     .split(" ")
     .filter((p) => p.length > 0 && !/^(NO|NRO)$/.test(p))
     .map((p) => ABREVIATURAS[p] ?? p)
+    .map(quitarOrdinal)
     .join(" ");
+}
+
+/**
+ * "5TA" → "5", "9NA" → "9".
+ *
+ * Los reportes escriben la Calle 5 como "Calle 5ta" y la 9 como "9na". Sin
+ * esto la terminación se confunde con un nomenclador —como la D de la 28D— y
+ * se termina buscando una "Calle 5TA" que no existe en ningún mapa.
+ *
+ * La lista es cerrada a propósito: los nomencladores reales de Cali son de una
+ * sola letra (28D, 8B) o de orientación (5N, 72W), así que ninguno colisiona
+ * con estas parejas.
+ */
+function quitarOrdinal(palabra: string): string {
+  const m = palabra.match(/^(\d+)(RA|RO|ER|DA|DO|TA|TO|MA|MO|VA|VO|NA|NO)$/);
+  return m ? m[1] : palabra;
 }
 
 /**
@@ -128,6 +145,18 @@ export function nombresDeVia(via: string): string[] {
   const numerada = resto.match(/^(\d+)\s*([A-Z]{1,2})?(\s+BIS)?$/);
 
   if (!numerada) {
+    // El camino contrario al de abajo: la placa produce "Calle 14 Norte" y el
+    // mapa puede tenerla como "Calle 14N". Sin esto, todo lo que salga de una
+    // dirección del norte o del oeste se queda sin encontrar.
+    const orientada = resto.match(/^(\d+)\s+(NORTE|SUR|OESTE|ESTE)$/);
+    if (orientada) {
+      const [, numero, orientacion] = orientada;
+      const inicial = orientacion.charAt(0);
+      candidatos.add(`${tipo} ${numero}${inicial}`);
+      candidatos.add(`${tipo} ${numero} ${inicial}`);
+      return [...candidatos];
+    }
+
     // "AVENIDA ROOSEVELT" también aparece como "ROOSEVELT" a secas.
     candidatos.add(resto);
     return [...candidatos];
@@ -155,8 +184,112 @@ export function nombresDeVia(via: string): string[] {
 // ---------------------------------------------------------------------------
 
 export type Consulta =
-  | { tipo: "cruce"; a: string; b: string }
+  | {
+      tipo: "cruce";
+      a: string;
+      b: string;
+      /**
+       * Metros que la placa declara desde la esquina, cuando la dirección venía
+       * en nomenclatura ("Carrera 56 #3-88" son 88 m). Es la única medida
+       * honesta del error del punto propuesto.
+       */
+      placa?: number;
+    }
   | { tipo: "tramo"; eje: string; desde: string; hasta: string };
+
+/**
+ * La vía que cruza a otra en la nomenclatura colombiana. Las carreras van
+ * contra las calles, y las diagonales contra las transversales.
+ */
+const COMPLEMENTO: Record<string, string> = {
+  CALLE: "CARRERA",
+  CARRERA: "CALLE",
+  AVENIDA: "CALLE",
+  AUTOPISTA: "CALLE",
+  DIAGONAL: "TRANSVERSAL",
+  TRANSVERSAL: "DIAGONAL",
+};
+
+const ORIENTACIONES_LARGAS = ["NORTE", "SUR", "OESTE", "ESTE"];
+
+/**
+ * Recorta la dirección de una línea que trae también el nombre del sitio y el
+ * barrio: "Edificio Ana Pilar - Carrera 56 #3-88, Cuarto de Legua".
+ *
+ * Los listados de la Alcaldía no vienen como direcciones sueltas sino como
+ * fichas, y sin este recorte se termina buscando en OpenStreetMap una vía
+ * llamada "Edificio Ana Pilar - Carrera 56", que evidentemente no existe.
+ *
+ * A diferencia de `normalizar`, conserva el `#`, que es lo que distingue una
+ * placa de un cruce.
+ */
+export function extraerDireccion(linea: string): string {
+  const limpia = linea
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .replace(/\([^)]*\)/g, " ");
+
+  // El barrio va al final y separado por coma. Se quedan sólo los trozos que
+  // hablan de vías, y así "…, Cuarto de Legua" se cae sin llevarse por delante
+  // un "Calle 5, entre Carrera 56 y 62".
+  const trozos = limpia
+    .split(",")
+    .map((t) =>
+      t
+        .replace(/[.;:"']/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .split(" ")
+        .map((p) => ABREVIATURAS[p] ?? p)
+        .map(quitarOrdinal)
+        .join(" "),
+    )
+    .filter((t) => t.length > 0);
+
+  const conVia = trozos.filter(
+    (t) =>
+      t.includes("#") ||
+      /\b(CON|ENTRE)\b/.test(t) ||
+      TIPOS_VIA.some((v) => new RegExp(`\\b${v}\\b`).test(t)),
+  );
+  if (conVia.length === 0) return "";
+
+  const texto = conVia.join(" ");
+
+  // Del nombre del sitio a la dirección: la dirección empieza donde aparece el
+  // primer tipo de vía.
+  const inicio = texto.search(new RegExp(`\\b(${TIPOS_VIA.join("|")})\\b`));
+  return (inicio >= 0 ? texto.slice(inicio) : texto).replace(/\s+/g, " ").trim();
+}
+
+/**
+ * "CARRERA 56 #3-88" → el cruce de la Carrera 56 con la Calle 3.
+ *
+ * La nomenclatura colombiana ya dice dónde está la esquina: el primer número
+ * después del `#` es la vía que cruza, y el segundo son los metros desde esa
+ * esquina. Por eso una placa no necesita geocodificador: se lee.
+ */
+function interpretarPlaca(direccion: string): Consulta | null {
+  const m = direccion.match(/^(.+?)\s*#\s*(\d+[A-Z]*)(?:\s*-\s*(\d+))?/);
+  if (!m) return null;
+
+  const eje = m[1].trim();
+  const tipoEje = TIPOS_VIA.find((v) => eje.startsWith(`${v} `));
+  if (!tipoEje) return null;
+
+  const cruza = COMPLEMENTO[tipoEje];
+  if (!cruza) return null;
+
+  // En el norte y el oeste la orientación la llevan las dos vías: la placa
+  // "Avenida 4 Norte #14-20" cruza con la Calle 14 Norte, no con la Calle 14.
+  const orientacion = ORIENTACIONES_LARGAS.find((o) => eje.endsWith(` ${o}`));
+  const sufijoPropio = /[A-Z]$/.test(m[2]);
+  const destino =
+    orientacion && !sufijoPropio ? `${cruza} ${m[2]} ${orientacion}` : `${cruza} ${m[2]}`;
+
+  return { tipo: "cruce", a: eje, b: destino, placa: m[3] ? Number(m[3]) : undefined };
+}
 
 const SEPARADOR_CRUCE = /\s+(?:CRUCE\s+CON|ESQUINA\s+CON|CON|X)\s+(?:LA\s+|EL\s+)?/;
 const SEPARADOR_TRAMO = /^(.+?)\s+ENTRE\s+(.+?)\s+Y\s+(.+)$/;
@@ -171,9 +304,12 @@ function heredarTipo(desde: string, hasta: string): string {
   return tipo ? `${tipo} ${hasta}` : hasta;
 }
 
-/** "CALLE 5 CON CARRERA 42" → un cruce. "CALLE 3 ENTRE 56 Y 62" → un tramo. */
+/**
+ * "CALLE 5 CON CARRERA 42" → un cruce. "CALLE 3 ENTRE 56 Y 62" → un tramo.
+ * "CARRERA 56 #3-88" → el cruce que dice la placa.
+ */
 export function interpretarDireccion(linea: string): Consulta | null {
-  const texto = normalizar(linea);
+  const texto = extraerDireccion(linea);
   if (!texto) return null;
 
   const tramo = texto.match(SEPARADOR_TRAMO);
@@ -191,7 +327,9 @@ export function interpretarDireccion(linea: string): Consulta | null {
     if (a && b) return { tipo: "cruce", a, b };
   }
 
-  return null;
+  // La placa va de última: si la línea trae "con", eso manda, porque una
+  // esquina dicha es más precisa que una deducida del nomenclador.
+  return interpretarPlaca(texto);
 }
 
 /** Todos los nombres que hay que pedirle a Overpass para resolver la consulta. */
@@ -474,7 +612,19 @@ function metrosEntre(a: Punto, b: Punto): number {
 /** Resuelve una línea del reporte, sea cruce o tramo. */
 export function resolver(consulta: Consulta, indice: IndiceVias): Hallazgo {
   if (consulta.tipo === "cruce") {
-    return resolverCruce(consulta.a, consulta.b, indice);
+    const hallazgo = resolverCruce(consulta.a, consulta.b, indice);
+
+    // Una placa ubica la esquina, no la puerta. Los metros que ella misma
+    // declara son la distancia que falta, y de qué lado de la esquina cae no
+    // lo dice la nomenclatura: pasada media cuadra, eso lo mira una persona.
+    if (consulta.placa !== undefined && hallazgo.punto && consulta.placa > 100) {
+      return {
+        ...hallazgo,
+        diagnostico: "dudosa",
+        detalle: `la placa está a ${consulta.placa} m de esta esquina`,
+      };
+    }
+    return hallazgo;
   }
 
   const uno = resolverCruce(consulta.eje, consulta.desde, indice);

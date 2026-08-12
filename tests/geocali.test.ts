@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buscarEsquinas,
+  extraerDireccion,
   cruces,
   interpretarDireccion,
   nombresDeVia,
@@ -112,6 +113,102 @@ test("en un tramo el segundo extremo hereda el tipo de vía del primero", () => 
     desde: "CARRERA 56",
     hasta: "CARRERA 62",
   });
+});
+
+// ---------------------------------------------------------------------------
+// Fichas con nombre, placa y barrio
+// ---------------------------------------------------------------------------
+
+test("se descarta el nombre del sitio y el barrio, y queda la dirección", () => {
+  assert.equal(
+    extraerDireccion("Panadería Quintapan – Calle 5ta con Carrera 42, Tequendama."),
+    "CALLE 5 CON CARRERA 42",
+  );
+  assert.equal(
+    extraerDireccion("Edificio Ana Pilar - Carrera 56 #3-88, Cuarto de Legua."),
+    "CARRERA 56 #3-88",
+  );
+  // El sitio se llama "Edificio Calle 9na…": la dirección empieza en el primer
+  // tipo de vía, aunque el nombre se pegue a ella.
+  assert.equal(
+    extraerDireccion("Edificio Calle 9na con Cra. 38 (Frente a las canchas), Eucarístico."),
+    "CALLE 9 CON CARRERA 38",
+  );
+});
+
+test("un barrio con coma no se lleva por delante un tramo", () => {
+  assert.equal(
+    extraerDireccion("Calle 5, entre Carrera 56 y 62, San Fernando."),
+    "CALLE 5 ENTRE CARRERA 56 Y 62",
+  );
+});
+
+test("los ordinales del reporte no se confunden con nomencladores", () => {
+  assert.equal(normalizar("Calle 5ta"), "CALLE 5");
+  assert.equal(normalizar("Calle 9na"), "CALLE 9");
+  // La D de la 28D sí es nomenclador y se queda.
+  assert.equal(normalizar("Carrera 28D"), "CARRERA 28D");
+  assert.equal(normalizar("Calle 8B"), "CALLE 8B");
+});
+
+test("una placa dice por sí sola en qué esquina está", () => {
+  // "Carrera 56 #3-88" es la Carrera 56, a 88 m de la Calle 3.
+  assert.deepEqual(interpretarDireccion("Edificio Ana Pilar - Carrera 56 #3-88, Cuarto de Legua."), {
+    tipo: "cruce",
+    a: "CARRERA 56",
+    b: "CALLE 3",
+    placa: 88,
+  });
+  // El Hospital Universitario del Valle: Calle 5 con Carrera 36.
+  assert.deepEqual(interpretarDireccion("Hospital Universitario del Valle – Calle 5ta #36-08."), {
+    tipo: "cruce",
+    a: "CALLE 5",
+    b: "CARRERA 36",
+    placa: 8,
+  });
+});
+
+test("en el norte la orientación la llevan las dos vías", () => {
+  assert.deepEqual(interpretarDireccion("Clínica ValleSalud Norte – Avenida 4 Norte #14-20."), {
+    tipo: "cruce",
+    a: "AVENIDA 4 NORTE",
+    b: "CALLE 14 NORTE",
+    placa: 20,
+  });
+  // Y esa Calle 14 Norte se busca también como "Calle 14N".
+  assert.ok(nombresDeVia("CALLE 14 NORTE").includes("CALLE 14N"));
+});
+
+test("el nomenclador de la placa manda sobre la orientación del eje", () => {
+  // "Cra 28D #72W-14": la 72 es Oeste porque lo dice la placa, no la carrera.
+  assert.deepEqual(interpretarDireccion("Notaria 20 - Cra 28D #72W-14, El Poblado II."), {
+    tipo: "cruce",
+    a: "CARRERA 28D",
+    b: "CALLE 72W",
+    placa: 14,
+  });
+});
+
+test("una esquina dicha manda sobre la deducida de la placa", () => {
+  const c = interpretarDireccion("Edificio – Calle 9 #38-21 con Carrera 44");
+  assert.equal(c?.tipo, "cruce");
+  assert.equal(c?.tipo === "cruce" ? c.b : "", "CARRERA 44");
+});
+
+test("una placa lejos de la esquina queda marcada para revisar", () => {
+  const indice = new Map([
+    ["CARRERA 58", [vertical(LNG, LAT - 0.01, LAT + 0.01)]],
+    ["CALLE 3", [horizontal(LAT, LNG - 0.01, LNG + 0.01)]],
+  ]) as IndiceVias;
+
+  // 138 m desde la esquina: más de media cuadra, lo mira una persona.
+  const lejos = resolver({ tipo: "cruce", a: "CARRERA 58", b: "CALLE 3", placa: 138 }, indice);
+  assert.equal(lejos.diagnostico, "dudosa");
+  assert.match(lejos.detalle, /138 m/);
+
+  // 88 m es la misma esquina para lo que sirve un mapa de emergencia.
+  const acomodada = resolver({ tipo: "cruce", a: "CARRERA 58", b: "CALLE 3", placa: 88 }, indice);
+  assert.equal(acomodada.diagnostico, "encontrada");
 });
 
 test("una línea que no es una dirección no se inventa", () => {
