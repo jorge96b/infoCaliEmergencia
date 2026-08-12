@@ -19,12 +19,15 @@ export default function Denunciar({
   filaId,
   ocupado,
   accion,
+  texto = "Denunciar este contenido",
 }: {
   tabla: TablaDenunciable;
   filaId: string;
   ocupado: boolean;
   /** El envoltorio de la hoja: bloquea, ejecuta, avisa y refresca. */
   accion: (fn: () => Promise<Resultado>, exito: string) => void;
+  /** Con qué palabras se ofrece. Cambia si lo denunciable no es el punto. */
+  texto?: string;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [motivo, setMotivo] = useState<MotivoDenuncia | null>(null);
@@ -53,7 +56,7 @@ export default function Denunciar({
         aria-expanded={false}
         className="mx-auto mt-2 block text-xs text-slate-500 underline underline-offset-2"
       >
-        Denunciar este contenido
+        {texto}
       </button>
     );
   }

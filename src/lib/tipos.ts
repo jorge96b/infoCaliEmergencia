@@ -21,6 +21,17 @@ export type Recurso = {
   destacado: boolean;
 };
 
+/**
+ * Texto libre de un reporte de necesidad, con el id de su fila para poder
+ * denunciar esa nota en concreto y no el punto entero. El id viaja como texto
+ * porque es lo que recibe `rpc_denunciar`, que atiende por igual a los uuid de
+ * los puntos y a los bigint de los reportes.
+ */
+export type NotaNecesidad = {
+  id: string;
+  texto: string;
+};
+
 export type NecesidadResumen = {
   recurso: string;
   etiqueta: string;
@@ -29,6 +40,9 @@ export type NecesidadResumen = {
   nivel: Demanda;
   confirmaciones: number;
   ultimo_reporte: string;
+  // Opcional a propósito: mientras no se aplique la migración 0008 la vista no
+  // devuelve esta columna, y la interfaz tiene que seguir funcionando igual.
+  notas?: NotaNecesidad[];
 };
 
 export type InsumoResumen = {

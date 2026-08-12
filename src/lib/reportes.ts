@@ -159,6 +159,8 @@ export function reportarNecesidad(
   recurso: string,
   falta: boolean,
   etiqueta = recurso,
+  /** Texto libre. Es lo único que da sentido al recurso `otro`. */
+  nota?: string,
 ): Promise<Resultado> {
   const client_id = nuevoClientId();
   return ejecutar({
@@ -171,6 +173,7 @@ export function reportarNecesidad(
       p_dispositivo: idDispositivo(),
       p_voto: falta ? 1 : -1,
       p_client_id: client_id,
+      p_nota: nota?.trim() || null,
       // La hora del momento del toque, no la del envío: un reporte que estuvo
       // encolado tres horas debe decaer desde que se observó.
       p_reportado_en: new Date().toISOString(),

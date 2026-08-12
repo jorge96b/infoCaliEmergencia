@@ -24,6 +24,9 @@ import type { EstadoPersona, NivelStock, PuntoMapa, Recurso } from "@/lib/tipos"
 
 type Pestana = "necesidades" | "disponible" | "personas";
 
+/** El recurso comodín del catálogo (migración 0008). Aquí manda el texto libre. */
+const OTRO = "otro";
+
 export default function HojaPunto({
   punto,
   recursos,
@@ -40,6 +43,29 @@ export default function HojaPunto({
   const [pestana, setPestana] = useState<Pestana>("necesidades");
   const [ocupado, setOcupado] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [escribiendo, setEscribiendo] = useState(false);
+  const [libre, setLibre] = useState("");
+
+  /** Comparte el enlace directo al punto; si no hay hoja nativa, lo copia. */
+  async function compartir() {
+    const url = `${window.location.origin}?p=${punto.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: punto.nombre,
+          text: `${punto.nombre} — ${punto.tipo_etiqueta}${punto.barrio ? ` · ${punto.barrio}` : ""}`,
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setAviso("Enlace copiado.");
+        setTimeout(() => setAviso(null), 4000);
+      }
+    } catch {
+      // La persona canceló la hoja de compartir, o el portapapeles no estaba
+      // disponible. No es un error que valga la pena mostrar.
+    }
+  }
 
   /** Envoltorio común: bloquea, ejecuta, avisa y refresca. */
   async function accion(fn: () => Promise<Resultado>, exito: string) {
@@ -65,6 +91,28 @@ export default function HojaPunto({
 
   const destacados = recursos.filter((r) => r.destacado);
   const yaPedidos = new Set(punto.necesidades.map((n) => n.recurso));
+
+  // "Otra cosa" sale de la grilla rápida y se maneja aparte: es lo único que no
+  // se puede reportar de un toque, porque sin el texto no dice nada. Y a
+  // diferencia del resto no se esconde cuando ya se pidió una vez, porque la
+  // siguiente puede ser una cosa distinta.
+  const otro = destacados.find((r) => r.slug === OTRO);
+  const rapidos = destacados.filter((r) => r.slug !== OTRO && !yaPedidos.has(r.slug));
+
+  async function enviarOtro() {
+    const texto = libre.trim();
+    if (texto.length < 3) {
+      setAviso("Escribe qué falta, aunque sea en dos palabras.");
+      setTimeout(() => setAviso(null), 4000);
+      return;
+    }
+    setLibre("");
+    setEscribiendo(false);
+    await accion(
+      () => reportarNecesidad(punto.id, OTRO, true, texto, texto),
+      `Reportaste que falta ${texto.toLowerCase()}.`,
+    );
+  }
 
   return (
     <div className="hoja">
@@ -99,9 +147,23 @@ export default function HojaPunto({
             )}
           </div>
         </div>
-        <button onClick={onCerrar} aria-label="Cerrar" className="btn-icono">
-          ✕
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${punto.lat},${punto.lng}`}
+            target="_blank"
+            rel="noopener"
+            aria-label="Cómo llegar"
+            className="btn-icono"
+          >
+            🧭
+          </a>
+          <button onClick={compartir} aria-label="Compartir" className="btn-icono">
+            🔗
+          </button>
+          <button onClick={onCerrar} aria-label="Cerrar" className="btn-icono">
+            ✕
+          </button>
+        </div>
       </header>
 
       {punto.descripcion && (
@@ -167,6 +229,29 @@ export default function HojaPunto({
                           {n.confirmaciones === 1 ? "persona" : "personas"} ·{" "}
                           {haceCuanto(n.ultimo_reporte)}
                         </p>
+                        {/* Lo que la gente escribió. En "Otra cosa" es el dato:
+                            sin esto la fila diría que falta algo sin decir qué. */}
+                        {n.notas && n.notas.length > 0 && (
+                          <ul className="mt-2 space-y-1.5">
+                            {n.notas.map((nota) => (
+                              <li
+                                key={nota.id}
+                                className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5"
+                              >
+                                <p className="break-words text-sm text-slate-200">
+                                  “{nota.texto}”
+                                </p>
+                                <Denunciar
+                                  tabla="necesidad_reportes"
+                                  filaId={nota.id}
+                                  ocupado={ocupado}
+                                  accion={accion}
+                                  texto="Denunciar esta nota"
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
                       <div className="flex shrink-0 flex-col gap-1.5">
                         <button
@@ -205,25 +290,75 @@ export default function HojaPunto({
                 Reportar que falta algo
               </p>
               <div className="grid grid-cols-3 gap-2">
-                {destacados
-                  .filter((r) => !yaPedidos.has(r.slug))
-                  .map((r) => (
-                    <button
-                      key={r.slug}
-                      disabled={ocupado}
-                      onClick={() =>
-                        accion(
-                          () => reportarNecesidad(punto.id, r.slug, true, r.etiqueta),
-                          `Reportaste que falta ${r.etiqueta.toLowerCase()}.`,
-                        )
-                      }
-                      className="btn-recurso"
-                    >
-                      <span className="text-2xl">{r.emoji}</span>
-                      <span className="text-xs leading-tight">{r.etiqueta}</span>
-                    </button>
-                  ))}
+                {rapidos.map((r) => (
+                  <button
+                    key={r.slug}
+                    disabled={ocupado}
+                    onClick={() =>
+                      accion(
+                        () => reportarNecesidad(punto.id, r.slug, true, r.etiqueta),
+                        `Reportaste que falta ${r.etiqueta.toLowerCase()}.`,
+                      )
+                    }
+                    className="btn-recurso"
+                  >
+                    <span className="text-2xl">{r.emoji}</span>
+                    <span className="text-xs leading-tight">{r.etiqueta}</span>
+                  </button>
+                ))}
+
+                {otro && !escribiendo && (
+                  <button
+                    disabled={ocupado}
+                    onClick={() => setEscribiendo(true)}
+                    aria-expanded={false}
+                    className="btn-recurso border-dashed"
+                  >
+                    <span className="text-2xl">{otro.emoji}</span>
+                    <span className="text-xs leading-tight">{otro.etiqueta}</span>
+                  </button>
+                )}
               </div>
+
+              {otro && escribiendo && (
+                <div className="mt-2 rounded-xl border border-slate-700 p-3">
+                  <label htmlFor="otra-necesidad" className="etiqueta">
+                    ¿Qué más falta aquí?
+                  </label>
+                  <textarea
+                    id="otra-necesidad"
+                    value={libre}
+                    onChange={(e) => setLibre(e.target.value.slice(0, 280))}
+                    maxLength={280}
+                    rows={2}
+                    autoFocus
+                    placeholder="Ej: una grúa, pañales de adulto, carpas grandes…"
+                    className="campo"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Esto lo lee cualquiera. No pongas nombres, teléfonos ni datos de
+                    personas.
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      disabled={ocupado || libre.trim().length < 3}
+                      onClick={enviarOtro}
+                      className="btn-mini btn-falta flex-1"
+                    >
+                      Reportar
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEscribiendo(false);
+                        setLibre("");
+                      }}
+                      className="btn-mini btn-llego"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -343,7 +478,11 @@ export default function HojaPunto({
         <Denunciar tabla="puntos" filaId={punto.id} ocupado={ocupado} accion={accion} />
       </div>
 
-      {aviso && <p className="aviso">{aviso}</p>}
+      {aviso && (
+        <p className="aviso" role="status" aria-live="polite">
+          {aviso}
+        </p>
+      )}
     </div>
   );
 }

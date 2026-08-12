@@ -134,6 +134,16 @@ body {
     @apply sticky bottom-0 mt-4 rounded-xl border border-sky-700/50 bg-sky-950/95
            px-3 py-2.5 text-center text-sm text-sky-200;
   }
+
+  /* ------------------------------------------------------------------ */
+  /* Vista de lista                                                      */
+  /* Alternativa textual al mapa: se recorre por debajo de la barra de   */
+  /* cifras y por encima de los controles flotantes.                     */
+  /* ------------------------------------------------------------------ */
+  .lista {
+    @apply absolute inset-0 z-[900] overflow-y-auto bg-slate-950
+           pt-[52px] pb-24;
+  }
 }
 
 /* ------------------------------------------------------------------ */
