@@ -16,7 +16,9 @@ tablas(nombre) as (values
   ('tipos_punto'), ('recursos'), ('dispositivos'), ('puntos'),
   ('punto_confirmaciones'), ('necesidad_reportes'), ('insumo_reportes'),
   ('persona_reportes'), ('presencia'), ('reportes_abuso'),
-  ('moderadores'), ('decisiones_moderacion'), ('acciones_moderacion')),
+  ('moderadores'), ('decisiones_moderacion'), ('acciones_moderacion'),
+  ('avisos'), ('reportes_oficiales'),
+  ('suscripciones_push'), ('envios_push'), ('nivel_notificado')),
 
 vistas(nombre) as (values
   ('v_necesidades'), ('v_insumos'), ('v_presencia'), ('v_personas'),
@@ -31,7 +33,22 @@ funciones(nombre) as (values
   ('rpc_crear_punto'), ('rpc_confirmar_punto'), ('rpc_reportar_necesidad'),
   ('rpc_reportar_insumo'), ('rpc_reportar_personas'), ('rpc_presencia_entrar'),
   ('rpc_presencia_latido'), ('rpc_presencia_salir'), ('rpc_mi_presencia'),
-  ('rpc_denunciar'), ('es_moderador'), ('rpc_mod_decidir'), ('rpc_mod_bloquear')),
+  ('rpc_denunciar'), ('es_moderador'), ('rpc_mod_decidir'), ('rpc_mod_bloquear'),
+  ('fn_rejilla'), ('rpc_push_suscribir'), ('rpc_push_ubicacion'), ('rpc_push_baja'),
+  ('rpc_push_destinatarios'), ('rpc_push_reservar'), ('rpc_push_resultado'),
+  ('rpc_push_barrido'), ('rpc_push_ahora'), ('rpc_push_liberar')),
+
+-- Funciones que sólo puede ejecutar el servidor con la clave de servicio.
+-- `rpc_push_destinatarios` devuelve endpoints de notificación, que son
+-- credenciales de envío: quien los tenga puede mandarle un push a ese teléfono.
+solo_servidor(nombre) as (values
+  ('rpc_push_destinatarios'), ('rpc_push_reservar'), ('rpc_push_ahora'),
+  ('rpc_push_liberar'), ('rpc_push_resultado'), ('rpc_push_barrido')),
+
+-- Y las que `anon` sí tiene que poder ejecutar, o el interruptor de
+-- notificaciones falla en silencio desde el teléfono.
+abiertas_a_anon(nombre) as (values
+  ('rpc_push_suscribir'), ('rpc_push_ubicacion'), ('rpc_push_baja')),
 
 -- Objetos que `anon` no debe poder leer bajo ningún concepto. Ojo: Supabase
 -- concede permisos por omisión sobre cada tabla y vista nueva del esquema
@@ -41,7 +58,13 @@ vedadas_a_anon(nombre) as (values
   ('presencia'), ('dispositivos'), ('reportes_abuso'),
   ('moderadores'), ('decisiones_moderacion'), ('acciones_moderacion'),
   ('v_filas_denunciables'), ('v_cola_moderacion'), ('v_ficha_dispositivo'),
-  ('v_salud_moderacion'), ('v_bitacora')),
+  ('v_salud_moderacion'), ('v_bitacora'),
+  -- Las tablas de lo oficial: `anon` sólo ve `v_avisos` y `v_reporte_oficial`,
+  -- que ya filtran por vigencia. Leer la tabla sería leer avisos retirados,
+  -- futuros o vencidos.
+  ('avisos'), ('reportes_oficiales'),
+  -- Un `endpoint` de push con sus claves es una credencial de envío.
+  ('suscripciones_push'), ('envios_push'), ('nivel_notificado')),
 
 -- Índices únicos que sostienen el control de abuso. Si alguno falta, un solo
 -- dispositivo podría mover el puntaje de una necesidad sin límite.
@@ -206,6 +229,56 @@ comprobaciones as (
     where g.table_schema = 'public' and g.table_name = 'acciones_moderacion'
       and g.grantee in ('anon', 'authenticated')
       and g.privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE'))
+
+  -- ---------------------------------------------------------------------------
+  -- Notificaciones push
+  -- ---------------------------------------------------------------------------
+
+  -- `has_function_privilege` mira también lo concedido a PUBLIC, que es como se
+  -- cuela este agujero: Postgres da EXECUTE a PUBLIC en cada función nueva, así
+  -- que basta con olvidar un `revoke` para publicar los endpoints de medio Cali.
+  union all
+  select 10, 'Push', 'anon puede ejecutar ' || p.proname, '✗ AGUJERO'
+  from pg_proc p
+  where p.pronamespace = 'public'::regnamespace
+    and p.proname in (select nombre from solo_servidor)
+    and has_function_privilege('anon', p.oid, 'EXECUTE')
+
+  union all
+  select 10, 'Push', 'los endpoints sólo los lee el servidor', '✓'
+  where not exists (
+    select 1 from pg_proc p
+    where p.pronamespace = 'public'::regnamespace
+      and p.proname in (select nombre from solo_servidor)
+      and has_function_privilege('anon', p.oid, 'EXECUTE'))
+
+  -- El fallo simétrico, y mucho más fácil de no notar: sin estos permisos el
+  -- interruptor de notificaciones no da error visible, simplemente no suscribe.
+  union all
+  select 10, 'Push', 'anon puede ' || p.proname,
+         case when has_function_privilege('anon', p.oid, 'EXECUTE') then '✓'
+              else '✗ SIN PERMISO' end
+  from pg_proc p
+  where p.pronamespace = 'public'::regnamespace
+    and p.proname in (select nombre from abiertas_a_anon)
+
+  union all
+  select 10, 'Push', count(*) || ' suscripciones activas (' ||
+         count(*) filter (where lat_aprox is not null) || ' con ubicación)',
+         case when count(*) = 0 then '· todavía nadie activó las notificaciones'
+              else '✓' end
+  from suscripciones_push where activa
+
+  -- La promesa de privacidad de la migración 0011 se verifica mirando las filas,
+  -- no leyendo el código: si algo guardó una coordenada exacta, aquí se ve.
+  union all
+  select 10, 'Push', 'las ubicaciones están redondeadas a ~1 km',
+         case when count(*) = 0 then '✓'
+              else '✗ ' || count(*) || ' CON PRECISIÓN DE MÁS' end
+  from suscripciones_push
+  where lat_aprox is not null
+    and (lat_aprox::numeric <> round(lat_aprox::numeric, 2)
+         or lng_aprox::numeric <> round(lng_aprox::numeric, 2))
 )
 
 select bloque, elemento, estado

@@ -280,3 +280,51 @@ export type ReporteOficial = {
 };
 
 export type Oficial = { avisos: Aviso[]; reporte: ReporteOficial | null };
+
+// ---------------------------------------------------------------------------
+// Notificaciones push
+//
+// El único contenido de la app que llega sin que nadie haya abierto nada, y por
+// eso el único que puede molestar de verdad. Los tipos de aquí los comparten
+// tres sitios que no comparten runtime: el navegador que se suscribe, las rutas
+// de servidor que envían, y `public/sw.js`, que no pasa por el compilador y por
+// tanto no puede importarlos — allá `CargaPush` está replicada a mano y hay un
+// comentario que apunta aquí.
+// ---------------------------------------------------------------------------
+
+export type PrioridadPush = "alta" | "media" | "baja";
+
+/** De dónde salió la notificación. Decide el texto y el enlace profundo. */
+export type OrigenPush = "aviso" | "reporte_oficial" | "punto" | "necesidad";
+
+/** Lo que viaja dentro del push y recibe el service worker. */
+export type CargaPush = {
+  origen: OrigenPush;
+  titulo: string;
+  cuerpo: string;
+  /** Calculada por el servidor con la ubicación aproximada (~1 km). */
+  prioridad: PrioridadPush;
+  /**
+   * Coordenadas del hecho, para que el service worker recalcule la distancia
+   * real contra la última posición guardada en el teléfono. Nulas cuando es de
+   * toda la ciudad: un toque de queda no tiene coordenadas.
+   */
+  lat: number | null;
+  lng: number | null;
+  /** Para abrir la ficha del lugar al tocar la notificación. */
+  punto_id: string | null;
+  /**
+   * Agrupa en la bandeja del sistema. Dos notificaciones con la misma etiqueta
+   * se sustituyen en vez de apilarse, que es lo que hace falta cuando la misma
+   * necesidad se reactiva.
+   */
+  etiqueta: string;
+};
+
+/** Estado del interruptor de notificaciones, tal como lo ve la interfaz. */
+export type EstadoPush =
+  | "no_soportado"
+  | "requiere_instalar"
+  | "denegado"
+  | "inactivo"
+  | "activo";
