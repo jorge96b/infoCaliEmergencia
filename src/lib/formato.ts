@@ -3,7 +3,9 @@ import type {
   Evento,
   MotivoDenuncia,
   NivelStock,
+  SeveridadAviso,
   TablaDenunciable,
+  TipoAviso,
   TipoEvento,
 } from "./tipos";
 
@@ -191,3 +193,84 @@ export const TABLA_DENUNCIABLE: Record<TablaDenunciable, string> = {
   insumo_reportes: "Disponibilidad",
   persona_reportes: "Conteo de personas",
 };
+
+// ---------------------------------------------------------------------------
+// Avisos oficiales
+// ---------------------------------------------------------------------------
+
+export const SEVERIDAD: Record<
+  SeveridadAviso,
+  { texto: string; fondo: string; borde: string; texto_color: string; franja: string }
+> = {
+  critico: {
+    texto: "Crítico",
+    fondo: "bg-red-500/15",
+    borde: "border-red-500/50",
+    texto_color: "text-red-300",
+    franja: "bg-red-700 text-red-50",
+  },
+  importante: {
+    texto: "Importante",
+    fondo: "bg-amber-500/15",
+    borde: "border-amber-500/50",
+    texto_color: "text-amber-300",
+    franja: "bg-amber-600 text-amber-50",
+  },
+  informativo: {
+    texto: "Informativo",
+    fondo: "bg-slate-500/10",
+    borde: "border-slate-600",
+    texto_color: "text-slate-300",
+    franja: "bg-slate-700 text-slate-100",
+  },
+};
+
+export const TIPO_AVISO: Record<TipoAviso, { emoji: string; etiqueta: string }> = {
+  toque_queda: { emoji: "🚫", etiqueta: "Toque de queda" },
+  movilidad: { emoji: "🚗", etiqueta: "Movilidad" },
+  servicios: { emoji: "⚡", etiqueta: "Servicios públicos" },
+  salud: { emoji: "🏥", etiqueta: "Salud" },
+  otro: { emoji: "📢", etiqueta: "Aviso" },
+};
+
+/** "hasta las 6:00 a. m." — la hora local de Cali, que es la que importa. */
+export function hora(iso: string): string {
+  return new Date(iso)
+    .toLocaleTimeString("es-CO", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/Bogota",
+    })
+    // Intl mete un espacio fino (U+202F) antes del meridiano y a veces junta
+    // las letras; se normaliza a un espacio normal para que no se vea raro.
+    .replace(/\s*([ap])\.\s*m\./i, " $1. m.")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function fechaHora(iso: string): string {
+  return new Date(iso).toLocaleString("es-CO", {
+    day: "numeric",
+    month: "long",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/Bogota",
+  });
+}
+
+/**
+ * La vigencia en una línea. Es lo que decide si alguien sale a la calle, así
+ * que dice siempre la hora exacta y no un "en 3 horas" que hay que traducir.
+ */
+export function vigencia(aviso: {
+  estado: "vigente" | "proximo";
+  vigente_desde: string;
+  vigente_hasta: string | null;
+}): string {
+  if (aviso.estado === "proximo") {
+    return `Desde ${fechaHora(aviso.vigente_desde)}`;
+  }
+  return aviso.vigente_hasta ? `Hasta las ${hora(aviso.vigente_hasta)}` : "Sin hora de fin definida";
+}

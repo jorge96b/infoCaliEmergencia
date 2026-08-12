@@ -60,9 +60,13 @@ export const problemaConfiguracion: string | null = (() => {
       urlBruta ?? "",
     )}`;
   }
-  // Una `anon key` es un JWT: tres partes separadas por puntos y bastante larga.
-  // Comprobarlo detecta el caso frecuente de haberla copiado a medias.
-  if (anon.split(".").length !== 3 || anon.length < 40) {
+  // Sólo se comprueba que tenga una longitud plausible, y a propósito no su
+  // forma: las claves antiguas son JWT de tres partes, pero Supabase ya emite
+  // claves `sb_publishable_…` que no lo son. Validar la forma habría rechazado
+  // una clave perfectamente válida y dejado la app inservible, que es mucho
+  // peor que dejar pasar una mala y que el servidor la rechace con un mensaje
+  // claro.
+  if (anon.length < 20) {
     return `NEXT_PUBLIC_SUPABASE_ANON_KEY parece incompleta (${anon.length} caracteres). Cópiala entera desde Settings → API.`;
   }
   return null;

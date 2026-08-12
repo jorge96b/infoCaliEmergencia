@@ -6,17 +6,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BarraGlobal from "@/components/BarraGlobal";
 import CrearPunto from "@/components/CrearPunto";
 import EstadoConexion from "@/components/EstadoConexion";
-import HojaActividad from "@/components/HojaActividad";
 import Filtros from "@/components/Filtros";
+import FranjaAviso from "@/components/FranjaAviso";
+import HojaActividad from "@/components/HojaActividad";
+import HojaAvisos from "@/components/HojaAvisos";
 import HojaPunto from "@/components/HojaPunto";
 import ListaPuntos from "@/components/ListaPuntos";
 import { arrancarCola } from "@/lib/cola";
-import { cargarCatalogos, cargarInstantanea, miPresencia } from "@/lib/datos";
+import { cargarCatalogos, cargarInstantanea, cargarOficial, miPresencia } from "@/lib/datos";
 import { idDispositivo } from "@/lib/dispositivo";
 import { aplicarFiltros, FILTROS_VACIOS, type FiltrosPuntos } from "@/lib/filtros";
 import { latido } from "@/lib/reportes";
 import { configurado, problemaConfiguracion } from "@/lib/supabase";
-import type { Instantanea, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
+import type { Instantanea, Oficial, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
 
 // Leaflet toca `window` al cargar, así que el mapa no puede renderizarse en el
 // servidor.
@@ -38,6 +40,11 @@ export default function Pagina() {
   const [presenciaEn, setPresenciaEn] = useState<string | null>(null);
   const [mostrarCalor, setMostrarCalor] = useState(true);
   const [actividad, setActividad] = useState(false);
+  const [oficial, setOficial] = useState<Oficial>({ avisos: [], reporte: null });
+  const [avisos, setAvisos] = useState(false);
+  // Lo leído se guarda en el propio teléfono: no hace falta estado en el
+  // servidor para algo que sólo le importa a quien mira la pantalla.
+  const [leidoEn, setLeidoEn] = useState<number>(0);
   const [destino, setDestino] = useState<[number, number] | null>(null);
   // Última ubicación conocida de la persona. Se usa para volar el mapa y para
   // ordenar la lista por cercanía; sólo se llena cuando toca "Ubicarme".
@@ -53,6 +60,8 @@ export default function Pagina() {
   const [cargando, setCargando] = useState(configurado);
 
   const refrescando = useRef(false);
+  const raiz = useRef<HTMLElement>(null);
+  const zonaSuperior = useRef<HTMLDivElement>(null);
 
   /** Devuelve la instantánea recién leída, o null si no se pudo. */
   const refrescar = useCallback(async (): Promise<Instantanea | null> => {
@@ -102,15 +111,27 @@ export default function Pagina() {
     if (!configurado) return;
 
     let vivo = true;
+
+    const refrescarOficial = async () => {
+      try {
+        setOficial(await cargarOficial());
+      } catch {
+        // Accesorio: si falla, el mapa sigue funcionando igual. El detalle del
+        // fallo ya lo reporta `refrescar`.
+      }
+    };
+
     (async () => {
       await asegurarCatalogos();
       await refrescar();
+      void refrescarOficial();
       if (vivo) setPresenciaEn(await miPresencia(idDispositivo()));
     })();
 
     const ciclo = () => {
       void asegurarCatalogos();
       void refrescar();
+      void refrescarOficial();
     };
     const reloj = setInterval(ciclo, REFRESCO_MS);
     // El puntaje de cada necesidad cambia con el paso del tiempo aunque no
@@ -165,6 +186,12 @@ export default function Pagina() {
   // compartido, que es para lo único que sirve esto.
   //
   useEffect(() => {
+    const guardado = Number(window.localStorage.getItem("ice-avisos-leidos") ?? 0);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (guardado) setLeidoEn(guardado);
+  }, []);
+
+  useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("p");
     // La URL es un sistema externo del que aquí sólo se lee una vez al montar:
     // no hay cascada que evitar, y leerla durante el render era justo lo que
@@ -190,6 +217,24 @@ export default function Pagina() {
     else url.searchParams.delete("p");
     window.history.replaceState(null, "", url);
   }, [seleccionado]);
+
+  // Publica el alto real de la zona superior en una variable CSS. La lista y
+  // los banners se colocan a partir de ella, así que la franja de alerta puede
+  // aparecer, desaparecer o cambiar de alto sin que nada se solape ni haya que
+  // ajustar ningún número a mano.
+  useEffect(() => {
+    const zona = zonaSuperior.current;
+    const destino = raiz.current;
+    if (!zona || !destino) return;
+
+    const medir = () =>
+      destino.style.setProperty("--alto-superior", `${zona.offsetHeight}px`);
+
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(zona);
+    return () => observador.disconnect();
+  }, []);
 
   // Mantener viva la sesión de presencia mientras la app esté abierta.
   useEffect(() => {
@@ -222,6 +267,21 @@ export default function Pagina() {
     () => aplicarFiltros(datos.puntos, filtros, busqueda),
     [datos.puntos, filtros, busqueda],
   );
+
+  // Se cuenta lo publicado después de la última vez que abrió la campana. Los
+  // `proximo` cuentan igual: enterarse de que mañana hay pico y placa es justo
+  // para lo que sirve el aviso.
+  const sinLeer = useMemo(
+    () => oficial.avisos.filter((a) => new Date(a.creado_en).getTime() > leidoEn).length,
+    [oficial.avisos, leidoEn],
+  );
+
+  const abrirAvisos = useCallback(() => {
+    const ahora = Date.now();
+    setAvisos(true);
+    setLeidoEn(ahora);
+    window.localStorage.setItem("ice-avisos-leidos", String(ahora));
+  }, []);
 
   const seleccionar = useCallback((p: PuntoMapa) => {
     setColocando(false);
@@ -265,11 +325,15 @@ export default function Pagina() {
   // La hoja de un punto se abre desde la lista completa (no la filtrada) para que
   // un enlace profundo o un punto ya abierto no desaparezca al filtrar.
   const punto = datos.puntos.find((p) => p.id === seleccionado) ?? null;
-  const hojaAbierta = !!punto || !!nuevoLugar || mostrarFiltros;
+  const hojaAbierta = !!punto || !!nuevoLugar || mostrarFiltros || actividad || avisos;
 
   return (
-    <main className="relative h-dvh w-full overflow-hidden bg-slate-950">
-      <BarraGlobal datos={datos.global} />
+    <main ref={raiz} className="relative h-dvh w-full overflow-hidden bg-slate-950">
+      <div ref={zonaSuperior} className="zona-superior">
+        <BarraGlobal datos={datos.global} sinLeer={sinLeer} onAvisos={abrirAvisos} />
+        <FranjaAviso avisos={oficial.avisos} onAbrir={abrirAvisos} />
+        <EstadoConexion />
+      </div>
 
       {/* El mapa no se desmonta al pasar a la lista. Recrearlo perdía el zoom y
           la posición, y volvía a pedir todas las teselas: caro con mala señal y
@@ -313,8 +377,6 @@ export default function Pagina() {
         </div>
       )}
 
-      <EstadoConexion />
-
       {colocando && (
         <div className="banner" role="status" aria-live="polite">
           Toca en el mapa el lugar exacto.
@@ -342,7 +404,23 @@ export default function Pagina() {
         </div>
       )}
 
-      {!punto && !nuevoLugar && !actividad && (
+      {!hojaAbierta && vista === "mapa" && (
+        <div className="controles-mapa">
+          <button onClick={ubicarme} className="btn-flotante" aria-label="Ubicarme">
+            ◎
+          </button>
+          <button
+            onClick={() => setMostrarCalor((v) => !v)}
+            className={`btn-flotante ${mostrarCalor ? "btn-flotante-activo" : ""}`}
+            aria-label="Mapa de calor"
+            aria-pressed={mostrarCalor}
+          >
+            🔥
+          </button>
+        </div>
+      )}
+
+      {!hojaAbierta && (
         <div className="controles">
           <button
             onClick={() => setVista((v) => (v === "mapa" ? "lista" : "mapa"))}
@@ -370,13 +448,19 @@ export default function Pagina() {
           >
             🕒
           </button>
-          <button onClick={() => setColocando(true)} className="btn-fab">
+          <button
+            onClick={() => {
+              setVista("mapa");
+              setColocando(true);
+            }}
+            className="btn-fab"
+          >
             ＋ Marcar lugar
           </button>
         </div>
       )}
 
-      {actividad && !punto && !nuevoLugar && (
+      {actividad && !punto && !nuevoLugar && !mostrarFiltros && !avisos && (
         <HojaActividad
           onCerrar={() => setActividad(false)}
           onIrAPunto={(e) => {
@@ -387,6 +471,29 @@ export default function Pagina() {
             setSeleccionado(e.punto_id);
             setActividad(false);
           }}
+        />
+      )}
+
+      {avisos && (
+        <HojaAvisos
+          avisos={oficial.avisos}
+          reporte={oficial.reporte}
+          onCerrar={() => setAvisos(false)}
+        />
+      )}
+
+      {/* Estaba importado y nunca se renderizaba: el botón 🔍 ponía
+          `mostrarFiltros` en true y no aparecía nada. Se perdió en un merge. */}
+      {mostrarFiltros && !punto && !nuevoLugar && (
+        <Filtros
+          tipos={tipos}
+          filtros={filtros}
+          busqueda={busqueda}
+          total={datos.puntos.length}
+          mostrados={puntosFiltrados.length}
+          onFiltros={setFiltros}
+          onBusqueda={setBusqueda}
+          onCerrar={() => setMostrarFiltros(false)}
         />
       )}
 

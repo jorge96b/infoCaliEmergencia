@@ -236,3 +236,47 @@ export type EntradaBitacora = {
   creado_en: string;
   moderador: string;
 };
+
+// ---------------------------------------------------------------------------
+// Información oficial
+//
+// De otra naturaleza que todo lo anterior: no se vota ni se valida por
+// consenso, la publica la autoridad y caduca por reloj. Por eso viaja aparte
+// hasta la interfaz, donde se muestra atribuida y nunca mezclada con los
+// conteos de la comunidad.
+// ---------------------------------------------------------------------------
+
+export type SeveridadAviso = "critico" | "importante" | "informativo";
+export type TipoAviso = "toque_queda" | "movilidad" | "servicios" | "salud" | "otro";
+
+export type Aviso = {
+  id: string;
+  tipo: TipoAviso;
+  severidad: SeveridadAviso;
+  titulo: string;
+  cuerpo: string | null;
+  fuente: string;
+  enlace: string | null;
+  vigente_desde: string;
+  vigente_hasta: string | null;
+  fijado: boolean;
+  creado_en: string;
+  /** `proximo` = anunciado pero todavía no rige. Nunca se muestra como vigente. */
+  estado: "vigente" | "proximo";
+};
+
+export type ReporteOficial = {
+  numero: number | null;
+  fuente: string;
+  /** La hora del boletín, no la de carga. */
+  reportado_en: string;
+  fallecidos: number | null;
+  rescatados: number | null;
+  colapsadas: number | null;
+  con_danos: number | null;
+  salud: string | null;
+  servicios: string | null;
+  creado_en: string;
+};
+
+export type Oficial = { avisos: Aviso[]; reporte: ReporteOficial | null };

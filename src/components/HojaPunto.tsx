@@ -26,6 +26,7 @@ type Pestana = "necesidades" | "disponible" | "personas";
 
 /** El recurso comodín del catálogo (migración 0008). Aquí manda el texto libre. */
 const OTRO = "otro";
+const VOLUNTARIOS = "voluntarios";
 
 export default function HojaPunto({
   punto,
@@ -97,7 +98,17 @@ export default function HojaPunto({
   // diferencia del resto no se esconde cuando ya se pidió una vez, porque la
   // siguiente puede ser una cosa distinta.
   const otro = destacados.find((r) => r.slug === OTRO);
-  const rapidos = destacados.filter((r) => r.slug !== OTRO && !yaPedidos.has(r.slug));
+  // Voluntarios sale de la grilla: tiene su propio bloque arriba y pedir lo
+  // mismo en dos sitios sólo confunde sobre cuál de los dos cuenta.
+  const rapidos = destacados.filter(
+    (r) => r.slug !== OTRO && r.slug !== VOLUNTARIOS && !yaPedidos.has(r.slug),
+  );
+
+  // El estado actual de voluntarios sale de las mismas necesidades que todo lo
+  // demás: mismo consenso, mismo decaimiento. Lo único distinto es el peso que
+  // se le da en pantalla.
+  const voluntarios = punto.necesidades.find((n) => n.recurso === VOLUNTARIOS) ?? null;
+  const otrasNecesidades = punto.necesidades.filter((n) => n.recurso !== VOLUNTARIOS);
 
   async function enviarOtro() {
     const texto = libre.trim();
@@ -189,6 +200,59 @@ export default function HojaPunto({
         {aqui ? "📍 Ya me fui de aquí" : "📍 Estoy en este punto"}
       </button>
 
+      {/* Voluntarios tiene sección propia y no una casilla más en la grilla.
+          Es la necesidad que más se repite y la que más rápido cambia: cuando
+          llega gente sobra en minutos, y cuando falta no da tiempo de buscarla
+          entre veintitantos recursos. */}
+      <section className="mt-4 rounded-xl border border-slate-700 p-3">
+        <div className="mb-2 flex items-start gap-2">
+          <span aria-hidden className="text-2xl leading-none">
+            🙋
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium leading-snug text-slate-100">
+              ¿Necesitan voluntarios aquí?
+            </p>
+            {voluntarios ? (
+              <p className={`text-sm ${DEMANDA[voluntarios.nivel].texto_color}`}>
+                {DEMANDA[voluntarios.nivel].texto} · {voluntarios.confirmaciones}{" "}
+                {voluntarios.confirmaciones === 1 ? "persona" : "personas"} ·{" "}
+                {haceCuanto(voluntarios.ultimo_reporte)}
+              </p>
+            ) : (
+              <p className="text-sm text-slate-400">Nadie lo ha reportado todavía.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            disabled={ocupado}
+            onClick={() =>
+              accion(
+                () => reportarNecesidad(punto.id, VOLUNTARIOS, true, "Voluntarios"),
+                "Reportaste que faltan voluntarios aquí.",
+              )
+            }
+            className="btn-grande btn-falta"
+          >
+            Sí, faltan
+          </button>
+          <button
+            disabled={ocupado}
+            onClick={() =>
+              accion(
+                () => reportarNecesidad(punto.id, VOLUNTARIOS, false, "Voluntarios"),
+                "Reportaste que ya no hacen falta voluntarios.",
+              )
+            }
+            className="btn-grande btn-llego"
+          >
+            Ya no hacen falta
+          </button>
+        </div>
+      </section>
+
       <nav className="mt-4 flex gap-1 rounded-xl bg-slate-800/60 p-1">
         {(
           [
@@ -212,9 +276,9 @@ export default function HojaPunto({
       <div className="mt-4 space-y-4">
         {pestana === "necesidades" && (
           <>
-            {punto.necesidades.length > 0 && (
+            {otrasNecesidades.length > 0 && (
               <ul className="space-y-2">
-                {punto.necesidades.map((n) => {
+                {otrasNecesidades.map((n) => {
                   const d = DEMANDA[n.nivel];
                   return (
                     <li

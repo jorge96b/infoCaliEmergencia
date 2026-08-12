@@ -21,8 +21,10 @@ import type { NecesidadResumen, PuntoMapa } from "@/lib/tipos";
 /** La necesidad que manda en la tarjeta: primero lo crítico, si no lo tibio. */
 function necesidadDestacada(p: PuntoMapa): NecesidadResumen | null {
   return (
-    p.necesidades.find((n) => n.nivel === "muy_requerido") ??
-    p.necesidades.find((n) => n.nivel === "poco_requerido") ??
+    // Voluntarios se excluye: ya tiene su propio distintivo en la fila, y
+    // enseñarlo también aquí lo mostraba dos veces.
+    p.necesidades.find((n) => n.nivel === "muy_requerido" && n.recurso !== "voluntarios") ??
+    p.necesidades.find((n) => n.nivel === "poco_requerido" && n.recurso !== "voluntarios") ??
     null
   );
 }
@@ -86,6 +88,11 @@ export default function ListaPuntos({
             (n) => n.nivel !== "no_requerido" && n.recurso !== destacada?.recurso,
           ).length;
           const obsoleto = estaObsoleto(p.ultimo_movimiento);
+          // Voluntarios se distingue del resto de necesidades en la lista: es
+          // lo que más gente puede resolver por su cuenta con sólo acercarse.
+          const faltanVoluntarios = p.necesidades.some(
+            (n) => n.recurso === "voluntarios" && n.nivel !== "no_requerido",
+          );
           const dist = ubicacion
             ? formatearDistancia(metros(ubicacion, [p.lat, p.lng]))
             : null;
@@ -110,7 +117,7 @@ export default function ListaPuntos({
                   p.personas > 0
                     ? `, ${p.personas} ${p.personas === 1 ? "persona" : "personas"}`
                     : ""
-                }${
+                }${faltanVoluntarios ? ", faltan voluntarios" : ""}${
                   dist ? `, a ${dist}` : ""
                 }, actualizado ${haceCuanto(p.ultimo_movimiento)}`}
                 className={`relative flex w-full items-start gap-3 overflow-hidden rounded-xl border py-3 pl-4 pr-3 text-left transition active:scale-[0.99] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 ${
@@ -181,6 +188,11 @@ export default function ListaPuntos({
 
                   {/* Una sola línea de metadatos en vez de una pila de chips. */}
                   <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    {faltanVoluntarios && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-sky-950 px-1.5 py-0.5 font-medium text-sky-300">
+                        <span aria-hidden="true">🙋</span> Faltan voluntarios
+                      </span>
+                    )}
                     {p.personas > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-1.5 py-0.5 font-medium text-slate-300">
                         <span aria-hidden="true">👥</span> {p.personas}

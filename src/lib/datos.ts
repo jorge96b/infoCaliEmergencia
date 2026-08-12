@@ -7,6 +7,9 @@ import type {
   PuntoMapa,
   Recurso,
   TipoPunto,
+  Aviso,
+  Oficial,
+  ReporteOficial,
 } from "./tipos";
 
 /**
@@ -89,4 +92,26 @@ export async function miPresencia(dispositivo: string): Promise<string | null> {
   });
   if (error) return null;
   return (data as string | null) ?? null;
+}
+
+/**
+ * Información oficial: avisos vigentes o próximos, y el último reporte de
+ * situación. Va en su propia función y no dentro de `cargarInstantanea` porque
+ * cambia con mucha menos frecuencia que el mapa y porque, si falla, el mapa
+ * tiene que seguir dibujándose igual.
+ */
+export async function cargarOficial(): Promise<Oficial> {
+  const sb = supabase();
+  const [avisos, reporte] = await Promise.all([
+    sb.from("v_avisos").select("*"),
+    sb.from("v_reporte_oficial").select("*").maybeSingle(),
+  ]);
+
+  if (avisos.error) throw avisos.error;
+
+  return {
+    avisos: (avisos.data ?? []) as Aviso[],
+    // El reporte es accesorio: sin él los avisos siguen sirviendo.
+    reporte: (reporte.data as ReporteOficial | null) ?? null,
+  };
 }

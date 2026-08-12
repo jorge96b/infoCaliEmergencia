@@ -19,18 +19,36 @@ body {
            pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur;
   }
 
+  /* Todo lo que va pegado arriba —cifras, franja de alerta y estado de
+     conexión— vive dentro de este contenedor y se apila solo. Antes cada pieza
+     se posicionaba con un desplazamiento fijo (52 px, top-16) que había que
+     recalcular a mano cada vez que algo cambiaba de alto; con una franja de
+     alerta de alto variable eso se rompía sin remedio. Ahora `page.tsx` mide el
+     alto real y lo publica en `--alto-superior`, que consumen la lista y los
+     banners. */
+  .zona-superior {
+    @apply absolute inset-x-0 top-0 z-[1001];
+  }
+
   .barra-global {
-    @apply absolute inset-x-0 top-0 z-[1000] border-b border-slate-800
-           bg-slate-900/95 backdrop-blur;
+    @apply border-b border-slate-800 bg-slate-900/95 backdrop-blur;
   }
 
   .banner {
-    @apply absolute inset-x-3 top-16 z-[1000] rounded-xl border border-slate-700
+    @apply absolute inset-x-3 z-[1000] rounded-xl border border-slate-700
            bg-slate-900/95 px-3 py-2.5 text-center text-sm text-slate-200 shadow-lg;
+    top: calc(var(--alto-superior, 52px) + 0.75rem);
   }
 
   .banner-error {
     @apply border-amber-600/50 bg-amber-950/90 text-amber-200;
+  }
+
+  /* Controles del propio mapa, en el borde derecho. Van aquí y no en la fila
+     de abajo porque esa ya iba al límite del ancho en pantallas de 360 px, y
+     porque "ubicarme" es un control del mapa: la gente lo busca justo ahí. */
+  .controles-mapa {
+    @apply absolute bottom-24 right-3 z-[1000] flex flex-col gap-2;
   }
 
   .controles {
@@ -118,8 +136,8 @@ body {
   /* Franja de estado de conexión. Va bajo la barra de cifras y por encima de
      todo lo demás: si no hay señal, es lo primero que hay que ver. */
   .estado {
-    @apply absolute inset-x-0 top-[52px] z-[1001] flex flex-wrap items-center
-           justify-center gap-x-2 px-3 py-2 text-center text-sm font-medium;
+    @apply flex flex-wrap items-center justify-center gap-x-2 px-3 py-2
+           text-center text-sm font-medium;
   }
 
   .estado-sin-red {
@@ -141,8 +159,8 @@ body {
   /* cifras y por encima de los controles flotantes.                     */
   /* ------------------------------------------------------------------ */
   .lista {
-    @apply absolute inset-0 z-[900] overflow-y-auto bg-slate-950
-           pt-[52px] pb-24;
+    @apply absolute inset-0 z-[900] overflow-y-auto bg-slate-950 pb-24;
+    padding-top: var(--alto-superior, 52px);
   }
 }
 

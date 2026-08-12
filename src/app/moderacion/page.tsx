@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AccesoModeracion from "@/components/mod/AccesoModeracion";
 import Bitacora from "@/components/mod/Bitacora";
+import PublicarAvisos from "@/components/mod/PublicarAvisos";
 import ColaDenuncias from "@/components/mod/ColaDenuncias";
 import FichaDispositivo from "@/components/mod/FichaDispositivo";
 import SaludModeracion from "@/components/mod/SaludModeracion";
@@ -17,9 +18,13 @@ import {
   salir,
   sesion,
   soyModerador,
+  cargarAvisosMod,
+  publicarAviso,
+  retirarAviso,
 } from "@/lib/moderacion";
 import { configurado } from "@/lib/supabaseModeracion";
 import type {
+  Aviso,
   Decision,
   EntradaBitacora,
   Ficha,
@@ -30,7 +35,7 @@ import type {
 
 const REFRESCO_MS = 30_000;
 
-type Pestana = "cola" | "revisadas" | "bitacora";
+type Pestana = "cola" | "revisadas" | "avisos" | "bitacora";
 
 export default function PaginaModeracion() {
   const [estado, setEstado] = useState<"cargando" | "fuera" | "sinPermiso" | "dentro">(
@@ -40,6 +45,7 @@ export default function PaginaModeracion() {
   const [cola, setCola] = useState<FilaCola[]>([]);
   const [salud, setSalud] = useState<Salud | null>(null);
   const [bitacora, setBitacora] = useState<EntradaBitacora[]>([]);
+  const [avisos, setAvisos] = useState<Aviso[]>([]);
   const [ficha, setFicha] = useState<{ ficha: Ficha | null; filas: FilaDispositivo[] } | null>(
     null,
   );
@@ -53,6 +59,7 @@ export default function PaginaModeracion() {
       setCola(filas);
       setSalud(s);
       if (p === "bitacora") setBitacora(await cargarBitacora());
+      if (p === "avisos") setAvisos(await cargarAvisosMod());
       setError(null);
     } catch (e) {
       // Mismo criterio que en el mapa: no afirmar una causa que no se conoce, y
@@ -198,6 +205,7 @@ export default function PaginaModeracion() {
           [
             ["cola", "Sin revisar"],
             ["revisadas", "Todo"],
+            ["avisos", "Avisos"],
             ["bitacora", "Bitácora"],
           ] as [Pestana, string][]
         ).map(([id, texto]) => (
@@ -221,6 +229,19 @@ export default function PaginaModeracion() {
 
       {pestana === "bitacora" ? (
         <Bitacora entradas={bitacora} />
+      ) : pestana === "avisos" ? (
+        <PublicarAvisos
+          avisos={avisos}
+          ocupado={ocupado}
+          onPublicar={(a) =>
+            void accion(async () => {
+              await publicarAviso(a);
+            }, "Aviso publicado.")
+          }
+          onRetirar={(id) =>
+            void accion(() => retirarAviso(id), "Aviso retirado.")
+          }
+        />
       ) : (
         <ColaDenuncias
           filas={cola}

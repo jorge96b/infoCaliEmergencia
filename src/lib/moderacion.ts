@@ -7,6 +7,9 @@ import type {
   FilaDispositivo,
   Salud,
   TablaDenunciable,
+  Aviso,
+  SeveridadAviso,
+  TipoAviso,
 } from "./tipos";
 
 /**
@@ -159,4 +162,74 @@ function mensaje(error: { message?: string; code?: string }): string {
   return `No se pudo aplicar. El servidor respondió: ${bruto}${
     error.code ? ` (${error.code})` : ""
   }`;
+}
+
+// ---------------------------------------------------------------------------
+// Publicación de información oficial
+//
+// Primera vía por la que un moderador CREA contenido público, en vez de sólo
+// ocultar o bloquear. Por eso el servidor valida más de lo habitual: un toque
+// de queda sin hora de fin, por ejemplo, se rechaza ahí y no aquí.
+// ---------------------------------------------------------------------------
+
+/** Los avisos vigentes o próximos, tal como los ve cualquiera. */
+export async function cargarAvisosMod(): Promise<Aviso[]> {
+  const { data, error } = await supabaseModeracion().from("v_avisos").select("*");
+  if (error) throw error;
+  return (data ?? []) as Aviso[];
+}
+
+export async function publicarAviso(a: {
+  titulo: string;
+  tipo: TipoAviso;
+  severidad: SeveridadAviso;
+  vigenteDesde: string;
+  vigenteHasta: string | null;
+  cuerpo?: string;
+  fijado: boolean;
+  enlace?: string;
+}): Promise<string> {
+  const { data, error } = await supabaseModeracion().rpc("rpc_mod_publicar_aviso", {
+    p_titulo: a.titulo.trim(),
+    p_tipo: a.tipo,
+    p_severidad: a.severidad,
+    p_vigente_desde: a.vigenteDesde,
+    p_vigente_hasta: a.vigenteHasta,
+    p_cuerpo: a.cuerpo?.trim() || null,
+    p_fijado: a.fijado,
+    p_enlace: a.enlace?.trim() || null,
+  });
+  if (error) throw new Error(mensaje(error));
+  return data as string;
+}
+
+export async function retirarAviso(id: string, motivo?: string): Promise<void> {
+  const { error } = await supabaseModeracion().rpc("rpc_mod_retirar_aviso", {
+    p_id: id,
+    p_motivo: motivo?.trim() || null,
+  });
+  if (error) throw new Error(mensaje(error));
+}
+
+export async function publicarReporte(r: {
+  reportadoEn: string;
+  numero?: number | null;
+  fallecidos?: number | null;
+  rescatados?: number | null;
+  colapsadas?: number | null;
+  conDanos?: number | null;
+  salud?: string;
+  servicios?: string;
+}): Promise<void> {
+  const { error } = await supabaseModeracion().rpc("rpc_mod_publicar_reporte", {
+    p_reportado_en: r.reportadoEn,
+    p_numero: r.numero ?? null,
+    p_fallecidos: r.fallecidos ?? null,
+    p_rescatados: r.rescatados ?? null,
+    p_colapsadas: r.colapsadas ?? null,
+    p_con_danos: r.conDanos ?? null,
+    p_salud: r.salud?.trim() || null,
+    p_servicios: r.servicios?.trim() || null,
+  });
+  if (error) throw new Error(mensaje(error));
 }
