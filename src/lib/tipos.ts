@@ -102,6 +102,12 @@ export type PropuestaMapa = {
 export type Global = {
   puntos_activos: number;
   personas_en_terreno: number;
+  /**
+   * Cuánta gente tiene la app abierta ahora mismo. No es lo mismo que
+   * `personas_en_terreno`, que son quienes marcaron "estoy aquí" en un punto:
+   * esa dice cuánta gente hay trabajando, y esta cuánta ciudad está mirando.
+   */
+  personas_en_linea: number;
   desaparecidos: number;
   heridos: number;
   rescatados: number;

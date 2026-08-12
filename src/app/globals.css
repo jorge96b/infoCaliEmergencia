@@ -218,6 +218,34 @@ body {
   text-align: center;
 }
 
+/* El puntico verde de "en línea". Late despacio para que se lea como algo vivo
+   y no como una alerta más: en esta pantalla el rojo que pulsa ya significa
+   necesidad crítica, y esto es la única cifra tranquilizadora que hay. */
+.punto-vivo {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgb(34 197 94 / 0.6);
+  animation: latido-vivo 2.4s ease-out infinite;
+}
+
+@keyframes latido-vivo {
+  70% {
+    box-shadow: 0 0 0 6px rgb(34 197 94 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(34 197 94 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .punto-vivo {
+    animation: none;
+  }
+}
+
 /* Esquina propuesta por el buscador y todavía sin confirmar. Va translúcida y
    punteada para que se lea de un vistazo que no está guardada: lo peligroso
    sería que se confundiera con un cierre ya cargado. */

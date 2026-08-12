@@ -17,7 +17,7 @@ import { cargarCatalogos, cargarInstantanea, cargarOficial, miPresencia } from "
 import { idDispositivo } from "@/lib/dispositivo";
 import { aplicarFiltros, FILTROS_VACIOS, type FiltrosPuntos } from "@/lib/filtros";
 import { guardarUbicacion, reconciliarPush } from "@/lib/push";
-import { latido } from "@/lib/reportes";
+import { latido, latidoEnLinea } from "@/lib/reportes";
 import { configurado, problemaConfiguracion } from "@/lib/supabase";
 import type { Instantanea, Oficial, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
 
@@ -269,6 +269,26 @@ export default function Pagina() {
     const reloj = setInterval(() => void latido(), LATIDO_MS);
     return () => clearInterval(reloj);
   }, [presenciaEn]);
+
+  // Decir que esta persona sigue mirando, para la cifra de gente en línea.
+  //
+  // Sólo con la pestaña a la vista: una app olvidada abierta en el fondo de un
+  // teléfono no es alguien conectado, y contarla infla justo la cifra que se
+  // mira para saber si la ciudad está pendiente. Al volver a la pestaña se late
+  // de inmediato, sin esperar los cinco minutos.
+  useEffect(() => {
+    if (!configurado) return;
+    const latir = () => {
+      if (document.visibilityState === "visible") void latidoEnLinea();
+    };
+    latir();
+    const reloj = setInterval(latir, LATIDO_MS);
+    document.addEventListener("visibilitychange", latir);
+    return () => {
+      clearInterval(reloj);
+      document.removeEventListener("visibilitychange", latir);
+    };
+  }, []);
 
   const trasCambio = useCallback(async () => {
     await refrescar();

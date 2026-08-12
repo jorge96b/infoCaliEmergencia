@@ -69,6 +69,25 @@ export default function BarraGlobal({
               <span className="text-sm text-slate-500">Cargando cifras…</span>
             )}
           </div>
+
+          {/* Fuera de la franja que hace scroll y anclada a la derecha.
+              Dentro quedaba cortada por el borde en cuanto la fila se llenaba
+              —que es siempre, ya iba al límite en pantallas de 360 px— y una
+              cifra que hay que ir a buscar arrastrando no la ve nadie.
+              Separada por una línea porque no es una cifra de la emergencia
+              sino del pulso de la app: mezclarla entre las personas
+              desaparecidas o heridas le quitaría gravedad a esas. */}
+          {datos && (
+            <div className="shrink-0 border-l border-slate-800 pl-3">
+              <div className="flex items-center gap-1.5">
+                <span aria-hidden className="punto-vivo" />
+                <span className="text-base font-bold leading-none text-slate-50">
+                  {datos.personas_en_linea}
+                </span>
+              </div>
+              <div className="text-[11px] leading-tight text-slate-400">En línea</div>
+            </div>
+          )}
           {datos && <span className="text-slate-500">{abierto ? "▲" : "▼"}</span>}
         </button>
       </div>
@@ -95,6 +114,14 @@ export default function BarraGlobal({
           ) : (
             <p className="text-sm text-slate-500">Todavía no hay necesidades reportadas.</p>
           )}
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+            <b className="text-slate-400">
+              {datos.personas_en_linea}{" "}
+              {datos.personas_en_linea === 1 ? "persona tiene" : "personas tienen"}
+            </b>{" "}
+            la app abierta en los últimos 10 minutos. Es distinto de las{" "}
+            {datos.personas_en_terreno} que se marcaron presentes en un punto.
+          </p>
           <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
             Información reportada por la comunidad, sin verificación oficial. No
             reemplaza a la línea 123 ni a los organismos de socorro.

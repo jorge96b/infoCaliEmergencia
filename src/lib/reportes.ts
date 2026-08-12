@@ -289,3 +289,23 @@ export async function latido(): Promise<void> {
     /* sin señal: la presencia caducará sola, que es el comportamiento correcto */
   }
 }
+
+/**
+ * Avisa que este dispositivo sigue con la app abierta, para la cifra de
+ * personas en línea. Caduca a los 10 minutos sin latir.
+ *
+ * Es distinto del latido de arriba: aquel mantiene viva una presencia declarada
+ * en un punto concreto, y este sólo dice "sigo aquí, mirando". Van por separado
+ * porque la mayoría de la gente mira el mapa sin marcarse en ningún sitio, y esa
+ * gente también es la ciudad conectada.
+ *
+ * Tampoco se encola, y por la misma razón: una cifra de "ahora mismo" que se
+ * rellenara con latidos de hace media hora estaría mintiendo.
+ */
+export async function latidoEnLinea(): Promise<void> {
+  try {
+    await supabase().rpc("rpc_latido_dispositivo", { p_dispositivo: idDispositivo() });
+  } catch {
+    /* sin señal: se cae solo de la cuenta, que es lo correcto */
+  }
+}
