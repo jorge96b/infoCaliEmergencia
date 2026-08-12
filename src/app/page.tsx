@@ -15,7 +15,7 @@ import { cargarCatalogos, cargarInstantanea, miPresencia } from "@/lib/datos";
 import { idDispositivo } from "@/lib/dispositivo";
 import { aplicarFiltros, FILTROS_VACIOS, type FiltrosPuntos } from "@/lib/filtros";
 import { latido } from "@/lib/reportes";
-import { configurado } from "@/lib/supabase";
+import { configurado, problemaConfiguracion } from "@/lib/supabase";
 import type { Instantanea, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
 
 // Leaflet toca `window` al cargar, así que el mapa no puede renderizarse en el
@@ -230,16 +230,34 @@ export default function Pagina() {
 
   if (!configurado) {
     return (
-      <main className="mx-auto max-w-lg p-6 text-slate-200">
-        <h1 className="mb-3 text-xl font-semibold">Falta configurar Supabase</h1>
-        <p className="mb-4 text-slate-400">
-          Copia <code className="text-slate-200">.env.example</code> a{" "}
-          <code className="text-slate-200">.env.local</code> y llena las dos variables
-          con los datos de tu proyecto. Luego reinicia el servidor.
+      <main className="mx-auto max-w-lg space-y-4 p-6 text-slate-200">
+        <h1 className="text-xl font-semibold">Falta configurar Supabase</h1>
+
+        <p className="rounded-xl border border-amber-600/40 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {problemaConfiguracion}
         </p>
-        <p className="text-slate-400">
-          Las instrucciones completas están en el <code className="text-slate-200">README.md</code>.
-        </p>
+
+        <div className="space-y-2 text-sm text-slate-400">
+          <p>
+            En Supabase, <b className="text-slate-200">Settings → API</b>, copia la
+            <b className="text-slate-200"> Project URL</b> y la{" "}
+            <b className="text-slate-200">anon key</b>. La URL debe verse así, sin
+            comillas ni barra final:
+          </p>
+          <pre className="overflow-x-auto rounded-lg bg-slate-800 p-3 text-xs text-slate-200">
+            https://abcdefghijklmnop.supabase.co
+          </pre>
+          <p>
+            En local van en <code className="text-slate-200">.env.local</code>. En
+            Vercel, en <b className="text-slate-200">Settings → Environment
+            Variables</b>.
+          </p>
+          <p className="rounded-lg border border-slate-700 bg-slate-800/60 p-3">
+            Si lo cambias en Vercel, hay que{" "}
+            <b className="text-slate-200">volver a desplegar</b>: estas variables se
+            incrustan al compilar, así que guardarlas no basta.
+          </p>
+        </div>
       </main>
     );
   }
