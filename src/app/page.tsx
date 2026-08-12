@@ -534,9 +534,14 @@ export default function Pagina() {
 
       {punto && (
         <HojaPunto
+          // Cada punto abre su ficha en limpio: sin la clave, la pestaña
+          // elegida en el punto anterior sobrevive al cambio, y desde el
+          // cambio de abajo puede ser una que en este punto ni existe.
+          key={punto.id}
           punto={punto}
           recursos={recursos}
           porTipo={porTipo}
+          tipo={tipos.find((t) => t.slug === punto.tipo)}
           aqui={presenciaEn === punto.id}
           onCerrar={() => setSeleccionado(null)}
           onCambio={trasCambio}

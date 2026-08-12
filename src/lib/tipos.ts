@@ -9,6 +9,13 @@ export type TipoPunto = {
   color: string;
   emoji: string;
   orden: number;
+  /**
+   * Si en este tipo de lugar se cuentan desaparecidos, heridos y rescatados.
+   * Opcional a propósito: si la migración 0013 aún no está aplicada, el campo
+   * no llega y la ficha se comporta como antes —con la pestaña visible— en vez
+   * de esconderla justo donde más falta hace.
+   */
+  reporta_personas?: boolean;
 };
 
 export type Recurso = {

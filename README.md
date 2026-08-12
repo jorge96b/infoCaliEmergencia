@@ -74,6 +74,7 @@ alcanza para empezar). En **SQL Editor**, ejecuta en orden los archivos de
 0010_semilla_avisos.sql
 0011_push.sql
 0012_recursos_por_tipo.sql
+0013_personas_por_tipo.sql
 ```
 
 (Hay dos archivos `0008`. Tocan objetos distintos y el orden alfabético los
@@ -332,6 +333,14 @@ mapa, los fragmentos de Next.js —que llevan hash, así que son inmutables— y
 reintentando POSTs a ciegas sería justo la forma de duplicar reportes.
 
 ### Datos personales
+
+El conteo sólo se pregunta donde hay afectados que contar: zonas afectadas y
+frentes de remoción de escombros. En un albergue o un centro de acopio no
+aparece, porque allí la gente se mide con la presencia; preguntar por
+desaparecidos donde no los hay invita a escribir una cifra inventada que
+terminaría sumando al contador de toda la ciudad. Lo decide una columna del
+catálogo (`tipos_punto.reporta_personas`), así que habilitar o quitar un tipo es
+un `update`, no un despliegue.
 
 `persona_reportes` guarda **sólo cifras**: ni nombres, ni teléfonos, ni fotos.
 Una base pública y anónima de personas desaparecidas por nombre sería una

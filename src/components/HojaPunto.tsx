@@ -20,7 +20,7 @@ import {
   estaObsoleto,
   haceCuanto,
 } from "@/lib/formato";
-import type { EstadoPersona, NivelStock, PuntoMapa, Recurso } from "@/lib/tipos";
+import type { EstadoPersona, NivelStock, PuntoMapa, Recurso, TipoPunto } from "@/lib/tipos";
 
 type Pestana = "necesidades" | "disponible" | "personas";
 
@@ -32,6 +32,7 @@ export default function HojaPunto({
   punto,
   recursos,
   porTipo,
+  tipo,
   aqui,
   onCerrar,
   onCambio,
@@ -40,6 +41,8 @@ export default function HojaPunto({
   recursos: Recurso[];
   /** Qué recursos vienen al caso en cada tipo de lugar, agrupados por tipo. */
   porTipo: Record<string, Recurso[]>;
+  /** La fila del catálogo para el tipo de este punto, si ya se cargó. */
+  tipo: TipoPunto | undefined;
   aqui: boolean;
   onCerrar: () => void;
   onCambio: () => void;
@@ -125,6 +128,22 @@ export default function HojaPunto({
   // "Qué hay" usa la misma lista del tipo. `otro` no cabe aquí: no se puede
   // reportar cuánto hay de un texto libre.
   const disponibles = base.filter((r) => r.slug !== OTRO);
+
+  // En un albergue o un centro de acopio no hay personas afectadas que contar:
+  // hay gente alojada y gente trabajando, y eso ya se mide con la presencia.
+  // Preguntar allí por desaparecidos invita a escribir una cifra inventada que
+  // termina sumándose al contador de toda la ciudad.
+  //
+  // Cuando el catálogo todavía no ha cargado —o la migración 0013 no está
+  // aplicada— el campo llega indefinido y la pestaña se muestra. Es la
+  // dirección segura del error: enseñarla de más en un albergue es ruido;
+  // esconderla en un colapso sería quitar la casilla donde más urge llenarla.
+  const cuentaPersonas = tipo?.reporta_personas !== false;
+
+  // El catálogo puede llegar después de abrir la ficha. Si para entonces había
+  // alguien en la pestaña de personas, se cae a la primera en vez de dejar un
+  // hueco en blanco donde estaba el contenido.
+  const activa: Pestana = pestana === "personas" && !cuentaPersonas ? "necesidades" : pestana;
 
   async function enviarOtro() {
     const texto = libre.trim();
@@ -274,14 +293,14 @@ export default function HojaPunto({
           [
             ["necesidades", "Qué falta"],
             ["disponible", "Qué hay"],
-            ["personas", "Personas"],
+            ...(cuentaPersonas ? [["personas", "Personas"]] : []),
           ] as [Pestana, string][]
         ).map(([id, texto]) => (
           <button
             key={id}
             onClick={() => setPestana(id)}
             className={`flex-1 rounded-lg px-2 py-2.5 text-sm font-medium transition ${
-              pestana === id ? "bg-slate-700 text-slate-50" : "text-slate-400"
+              activa === id ? "bg-slate-700 text-slate-50" : "text-slate-400"
             }`}
           >
             {texto}
@@ -290,7 +309,7 @@ export default function HojaPunto({
       </nav>
 
       <div className="mt-4 space-y-4">
-        {pestana === "necesidades" && (
+        {activa === "necesidades" && (
           <>
             {otrasNecesidades.length > 0 && (
               <ul className="space-y-2">
@@ -443,7 +462,7 @@ export default function HojaPunto({
           </>
         )}
 
-        {pestana === "disponible" && (
+        {activa === "disponible" && (
           <div className="space-y-3">
             {punto.insumos.length > 0 && (
               <ul className="flex flex-wrap gap-2">
@@ -492,7 +511,7 @@ export default function HojaPunto({
           </div>
         )}
 
-        {pestana === "personas" && (
+        {activa === "personas" && (
           <div className="space-y-3">
             <p className="rounded-lg border border-slate-700 bg-slate-800/60 p-2.5 text-sm text-slate-300">
               Sólo cifras, sin nombres ni datos personales. Para buscar a una persona

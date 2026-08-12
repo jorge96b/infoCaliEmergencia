@@ -175,6 +175,23 @@ comprobaciones as (
   from (select exists (select 1 from recursos_por_tipo rt where rt.tipo = t.slug)
         from tipos_punto t where t.activo) as tp (tiene)
 
+  -- Dónde se pregunta por desaparecidos, heridos y rescatados. Si esto sale en
+  -- cero, la migración 0013 no está aplicada y la pestaña sigue saliendo en los
+  -- albergues; si sale de más, alguien habilitó un tipo donde no hay afectados
+  -- que contar y esas cifras suman al global de la ciudad.
+  --
+  -- La columna se lee por `to_jsonb` y no por su nombre a propósito: si la
+  -- migración no está aplicada, nombrarla directamente reventaría el archivo
+  -- entero con un "column does not exist" y no quedaría ni una comprobación en
+  -- pantalla. Por `to_jsonb` la clave simplemente no está y sale el ✗.
+  union all
+  select 7, 'Catálogos',
+         'cuentan personas afectadas: ' ||
+         coalesce(string_agg(t.slug, ', ' order by t.orden), 'ninguno'),
+         case when count(*) = 0 then '✗ MIGRACIÓN 0013 SIN APLICAR' else '✓' end
+  from tipos_punto t
+  where t.activo and (to_jsonb(t) ->> 'reporta_personas')::boolean
+
   -- Un mapa vacío es un mapa muerto: la primera persona que llegue tiene que
   -- encontrar algo útil.
   union all
