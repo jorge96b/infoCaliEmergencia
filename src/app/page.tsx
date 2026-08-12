@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BarraGlobal from "@/components/BarraGlobal";
 import CrearPunto from "@/components/CrearPunto";
 import EstadoConexion from "@/components/EstadoConexion";
+import HojaActividad from "@/components/HojaActividad";
 import Filtros from "@/components/Filtros";
 import HojaPunto from "@/components/HojaPunto";
 import ListaPuntos from "@/components/ListaPuntos";
@@ -36,6 +37,7 @@ export default function Pagina() {
   const [nuevoLugar, setNuevoLugar] = useState<{ lat: number; lng: number } | null>(null);
   const [presenciaEn, setPresenciaEn] = useState<string | null>(null);
   const [mostrarCalor, setMostrarCalor] = useState(true);
+  const [actividad, setActividad] = useState(false);
   const [destino, setDestino] = useState<[number, number] | null>(null);
   // Última ubicación conocida de la persona. Se usa para volar el mapa y para
   // ordenar la lista por cercanía; sólo se llena cuando toca "Ubicarme".
@@ -267,7 +269,13 @@ export default function Pagina() {
           calor={datos.calor}
           mostrarCalor={mostrarCalor}
           destino={destino}
-          onSeleccionar={seleccionar}
+          onSeleccionar={(p: PuntoMapa) => {
+            setColocando(false);
+            // El mapa se sigue pudiendo tocar por detrás de la línea de tiempo;
+            // sin esto quedarían dos hojas apiladas.
+            setActividad(false);
+            setSeleccionado(p.id);
+          }}
           onClicMapa={(lat, lng) => {
             if (colocando) {
               setNuevoLugar({ lat, lng });
@@ -316,7 +324,7 @@ export default function Pagina() {
         </div>
       )}
 
-      {!hojaAbierta && (
+      {!punto && !nuevoLugar && !actividad && (
         <div className="controles">
           <button
             onClick={() => setVista((v) => (v === "mapa" ? "lista" : "mapa"))}
@@ -337,43 +345,30 @@ export default function Pagina() {
           >
             🔍
           </button>
-          {vista === "mapa" && (
-            <>
-              <button onClick={ubicarme} className="btn-flotante" aria-label="Ubicarme">
-                ◎
-              </button>
-              <button
-                onClick={() => setMostrarCalor((v) => !v)}
-                className={`btn-flotante ${mostrarCalor ? "btn-flotante-activo" : ""}`}
-                aria-label="Mapa de calor"
-                aria-pressed={mostrarCalor}
-              >
-                🔥
-              </button>
-            </>
-          )}
           <button
-            onClick={() => {
-              setVista("mapa");
-              setColocando(true);
-            }}
-            className="btn-fab"
+            onClick={() => setActividad(true)}
+            className="btn-flotante"
+            aria-label="Lo que se está reportando"
           >
+            🕒
+          </button>
+          <button onClick={() => setColocando(true)} className="btn-fab">
             ＋ Marcar lugar
           </button>
         </div>
       )}
 
-      {mostrarFiltros && (
-        <Filtros
-          tipos={tipos}
-          filtros={filtros}
-          busqueda={busqueda}
-          total={datos.puntos.length}
-          mostrados={puntosFiltrados.length}
-          onFiltros={setFiltros}
-          onBusqueda={setBusqueda}
-          onCerrar={() => setMostrarFiltros(false)}
+      {actividad && !punto && !nuevoLugar && (
+        <HojaActividad
+          onCerrar={() => setActividad(false)}
+          onIrAPunto={(e) => {
+            // Volar hasta el lugar y abrir su ficha. Si el punto desapareció
+            // entre refrescos, `punto` queda nulo y la ficha no se abre; el
+            // mapa igual se mueve, que es mejor que no responder al toque.
+            setDestino([e.lat, e.lng]);
+            setSeleccionado(e.punto_id);
+            setActividad(false);
+          }}
         />
       )}
 
